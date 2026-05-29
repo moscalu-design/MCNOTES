@@ -6,6 +6,26 @@ This log records changes specific to the AFS extractor and AFS package structure
 
 ### Added
 
+- Added `AFS_Package/afs_extractor.py` using the AFS-specific opinion-start, timetable-stop, prefix-merge, and statistics logic.
+- Added AFS output routing to `AFS_Package/outputs`.
+- Added `analysis/afs_accuracy_analysis.py` for repeatable full-folder comparison against `Data Analysis/cleaned_database.csv`.
+- Enabled AFS in `analysis/note_type_registry.json`.
+
+### Tested
+
+- Ran the extractor across all 123 PDFs in `AFS_Package/AFS_File_Folder`.
+- Generated `afs_opinion_word_counts_raw.csv` and `afs_opinion_word_counts_statistics.csv`.
+- Compared all 123 extracted rows against the cleaned database: 3,321 fields compared, 3,319 matched, 2 differed.
+- Confirmed the two remaining differences are `Extraction` labels where the database marks two files as `Manual` and the extractor correctly labels the fresh run as `Automated`.
+
+### Changed
+
+- Added operation-number fallback from document text for AFS files whose filenames do not contain the operation number.
+
+## 2026-05-29 - Package Setup
+
+### Added
+
 - Added `AFS_Package` as the dedicated home for future AFS extraction work.
 - Registered AFS as a disabled placeholder in `analysis/note_type_registry.json`.
 - Added `AFS_Package/README.md`.
@@ -13,6 +33,4 @@ This log records changes specific to the AFS extractor and AFS package structure
 
 ### Pending
 
-- Add `AFS_Package/afs_extractor.py`.
-- Add AFS-specific accuracy analysis after the extractor is available.
-
+- Add independent visible-PDF/manual audit reporting if we need the same manual-read style validation used for GNG.

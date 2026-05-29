@@ -1,13 +1,15 @@
 # MCNOTES
 
-Utilities for extracting and validating MC note data from GNG PDFs.
+Utilities for extracting and validating MC note data from GNG and AFS PDFs.
 
 ## What Is Included
 
 - `GNG_Package/gng_extractor.py` extracts GNG metadata and full service-block word counts from PDFs.
+- `AFS_Package/afs_extractor.py` extracts AFS metadata, opinion word counts, and AFS summary statistics from PDFs.
 - `analysis/gng_accuracy_analysis.py` compares script output against an independent visible-PDF extraction for a 25-document sample.
+- `analysis/afs_accuracy_analysis.py` compares AFS script output against the cleaned database.
 - `analysis/run_analysis.py` runs registered note-type analyses.
-- `analysis/note_type_registry.json` defines the enabled GNG workflow and placeholders for future AFS and OTHER work.
+- `analysis/note_type_registry.json` defines the enabled GNG and AFS workflows and the future OTHER placeholder.
 - `GNG_Package`, `AFS_Package`, and `OTHER_Package` are dedicated spaces for each extractor family.
 - `Data Analysis` is the dedicated database/dashboard analysis section.
 - `CHANGELOG.md` records project changes.
@@ -18,7 +20,7 @@ Source PDFs and generated reports are intentionally excluded from git because th
 
 ```text
 GNG_Package/       GNG extractor, GNG PDFs, GNG-specific outputs and changelog
-AFS_Package/       Future AFS extractor, AFS PDFs, AFS-specific outputs and changelog
+AFS_Package/       AFS extractor, AFS PDFs, AFS-specific outputs and changelog
 OTHER_Package/     Future OTHER extractor, source files, outputs and changelog
 analysis/          Shared runner and accuracy-analysis tooling
 Data Analysis/     Database/dashboard analysis scripts and source files
@@ -61,6 +63,24 @@ The analysis writes local outputs under:
 
 ```text
 GNG_Package/outputs/gng_accuracy/
+```
+
+## Run AFS Extraction
+
+```powershell
+python .\AFS_Package\afs_extractor.py
+```
+
+Compare AFS output against the cleaned database:
+
+```powershell
+python .\analysis\run_analysis.py AFS
+```
+
+The AFS reports write local outputs under:
+
+```text
+AFS_Package/outputs/
 ```
 
 ## Counting Basis

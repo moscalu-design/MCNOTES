@@ -1,18 +1,24 @@
 # AFS Package
 
-Dedicated workspace for the future AFS extractor.
+Dedicated workspace for the AFS extractor.
 
 ## Contents
 
 - `AFS_File_Folder/` - local source PDFs. Ignored by git.
-- `outputs/` - future AFS extraction and accuracy outputs. Ignored by git.
+- `afs_extractor.py` - AFS PDF extractor.
+- `outputs/` - AFS extraction and accuracy outputs. Ignored by git.
 - `CHANGELOG.md` - AFS-specific change log.
 
-## Status
+## Run
 
-AFS extraction code has not been added yet. Paste the AFS extractor when ready, and it should live here as:
+Extract all AFS PDFs:
 
-```text
-AFS_Package/afs_extractor.py
+```powershell
+python .\AFS_Package\afs_extractor.py
 ```
 
+Compare all AFS PDFs against the cleaned database:
+
+```powershell
+python .\analysis\run_analysis.py AFS
+```

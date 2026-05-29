@@ -8,13 +8,13 @@
     "changelog": "GNG_Package/CHANGELOG.md"
   },
   "AFS": {
-    "enabled": false,
+    "enabled": true,
     "folder": "AFS_Package/AFS_File_Folder",
     "extractor": "AFS_Package/afs_extractor.py",
     "analysis_script": "analysis/afs_accuracy_analysis.py",
     "output_folder": "AFS_Package/outputs/afs_accuracy",
     "changelog": "AFS_Package/CHANGELOG.md",
-    "notes": "Placeholder for the future AFS file type."
+    "notes": "AFS extractor and database-comparison analysis are available."
   },
   "OTHER": {
     "enabled": false,

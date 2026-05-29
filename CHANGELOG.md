@@ -2,6 +2,23 @@
 
 This log records material changes made to the local GNG extraction project.
 
+## 2026-05-29 - AFS Extractor
+
+### Added
+
+- Added the AFS extractor in `AFS_Package/afs_extractor.py`.
+- Added repeatable AFS database-comparison analysis in `analysis/afs_accuracy_analysis.py`.
+
+### Changed
+
+- Enabled AFS in `analysis/note_type_registry.json`.
+- Added operation-number fallback from PDF text for AFS files without operation numbers in the filename.
+
+### Tested
+
+- Ran the AFS extractor across all 123 PDFs in `AFS_Package/AFS_File_Folder`.
+- Compared the AFS output against `Data Analysis/cleaned_database.csv`; 3,319 of 3,321 fields matched.
+
 ## 2026-05-29
 
 ### Added
