@@ -10,10 +10,14 @@
     <div class="app-shell">
       <aside class="sidebar" aria-label="Dashboard filters">
         <div class="brand-block">
-          <div class="brand-mark" aria-hidden="true">MC</div>
+          <div class="brand-mark" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
           <div>
-            <h1>MC Notes</h1>
-            <p>Data Observatory</p>
+            <h1>EIB MC Notes</h1>
+            <p>Operations text analytics</p>
           </div>
         </div>
 
@@ -88,6 +92,7 @@
           <button class="tab-button active" type="button" data-view="overview">Overview</button>
           <button class="tab-button" type="button" data-view="time">Time Series</button>
           <button class="tab-button" type="button" data-view="batches">Batch Folders</button>
+          <button class="tab-button" type="button" data-view="tests">Tests</button>
           <button class="tab-button" type="button" data-view="quality">Quality</button>
           <button class="tab-button" type="button" data-view="records">Records</button>
         </nav>
@@ -133,7 +138,7 @@
               <div class="panel-header">
                 <div>
                   <h3>Department Word Share</h3>
-                  <p>Top department-coded word totals by active template selection.</p>
+                  <p>Template-aware matrix: departments are shown by template to avoid false reads.</p>
                 </div>
               </div>
               <div id="departmentChart" class="chart tall"></div>
@@ -176,11 +181,78 @@
             <article class="panel full">
               <div class="panel-header">
                 <div>
+                  <h3>Monthly Manual Correction Rate</h3>
+                  <p>Manual share over time, by template.</p>
+                </div>
+              </div>
+              <div id="timeManualChart" class="chart xlarge"></div>
+            </article>
+
+            <article class="panel full">
+              <div class="panel-header">
+                <div>
+                  <h3>Cumulative Database Build</h3>
+                  <p>Running document totals by validation month.</p>
+                </div>
+              </div>
+              <div id="timeCumulativeChart" class="chart xlarge"></div>
+            </article>
+
+            <article class="panel full">
+              <div class="panel-header">
+                <div>
                   <h3>Calendar Heatmap</h3>
                   <p>Monthly document volume intensity.</p>
                 </div>
               </div>
               <div id="calendarHeatmap" class="heatmap"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" data-view-panel="tests">
+          <div class="dashboard-grid">
+            <article class="panel full">
+              <div class="panel-header">
+                <div>
+                  <h3>Statistical and Data Integrity Tests</h3>
+                  <p>Automated checks generated from the Database-tab analysis exports.</p>
+                </div>
+              </div>
+              <div id="testCards" class="test-grid"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <h3>Test Status</h3>
+                  <p>Pass, warning, and informational checks.</p>
+                </div>
+              </div>
+              <div id="testStatusChart" class="chart"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <h3>GNG Department Check</h3>
+                  <p>Expected department coverage and unexpected leakage.</p>
+                </div>
+              </div>
+              <div id="gngDepartmentTestChart" class="chart"></div>
+            </article>
+
+            <article class="panel full">
+              <div class="panel-header">
+                <div>
+                  <h3>Test Detail Rows</h3>
+                  <p>Representative records behind warning checks.</p>
+                </div>
+                <select id="testDetailFilter" class="compact-select"></select>
+              </div>
+              <div class="table-wrap">
+                <table id="testDetailTable"></table>
+              </div>
             </article>
           </div>
         </section>

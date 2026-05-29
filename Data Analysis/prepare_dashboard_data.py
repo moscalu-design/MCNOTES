@@ -70,6 +70,13 @@ def records_from_csv(path: Path, columns: list[str] | None = None) -> list[dict]
     return rows
 
 
+def load_tests() -> dict:
+    path = ROOT / "dashboard_tests.json"
+    if not path.exists():
+        return {"tests": []}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 def main() -> None:
     cleaned = pd.read_csv(ROOT / "cleaned_database.csv")
     cleaned = cleaned[RECORD_COLUMNS].copy()
@@ -151,6 +158,7 @@ def main() -> None:
         "departmentByTemplate": records_from_csv(ROOT / "department_word_counts_by_template.csv"),
         "batchOverview": records_from_csv(ROOT / "batch_folder_overview.csv"),
         "dataQuality": records_from_csv(ROOT / "data_quality_flags.csv"),
+        "tests": load_tests()["tests"],
     }
 
     (ROOT / "dashboard_data.json").write_text(
