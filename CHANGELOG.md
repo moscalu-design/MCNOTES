@@ -2,6 +2,23 @@
 
 This log records material changes made to the local GNG extraction project.
 
+## 2026-05-29 - OTHER Extractor
+
+### Added
+
+- Added the OTHER extractor in `OTHER_Package/other_extractor.py`.
+- Added repeatable OTHER independent visible-PDF analysis in `analysis/other_visible_accuracy_analysis.py`.
+
+### Changed
+
+- Enabled OTHER in `analysis/note_type_registry.json`.
+- Updated ignore rules so uploaded OTHER PDFs stay local while `.gitkeep` remains tracked.
+
+### Tested
+
+- Ran the OTHER extractor across all 253 PDFs in `OTHER_Package/OTHER_File_Folder`.
+- Compared the OTHER output against independently rebuilt visible PDF text; 6,411 of 6,831 fields matched exactly.
+
 ## 2026-05-29 - AFS Extractor
 
 ### Added

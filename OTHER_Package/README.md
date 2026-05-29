@@ -1,18 +1,25 @@
 # OTHER Package
 
-Dedicated workspace for the future OTHER extractor.
+Dedicated workspace for the OTHER extractor.
 
 ## Contents
 
-- `OTHER_File_Folder/` - local source files. Ignored by git.
-- `outputs/` - future OTHER extraction and accuracy outputs. Ignored by git.
+- `OTHER_File_Folder/` - local source PDFs. Ignored by git.
+- `PREFIX_MERGE.xlsx` - local prefix-to-output-column mapping workbook. Ignored by git.
+- `other_extractor.py` - OTHER PDF extractor.
+- `outputs/` - OTHER extraction and accuracy outputs. Ignored by git.
 - `CHANGELOG.md` - OTHER-specific change log.
 
-## Status
+## Run
 
-OTHER extraction code has not been added yet. When ready, it should live here as:
+Extract all OTHER PDFs:
 
-```text
-OTHER_Package/other_extractor.py
+```powershell
+python .\OTHER_Package\other_extractor.py
 ```
 
+Compare OTHER output against independent visible-PDF extraction:
+
+```powershell
+python .\analysis\run_analysis.py OTHER
+```

@@ -17,12 +17,12 @@
     "notes": "AFS extractor and independent visible-PDF analysis are available."
   },
   "OTHER": {
-    "enabled": false,
+    "enabled": true,
     "folder": "OTHER_Package/OTHER_File_Folder",
     "extractor": "OTHER_Package/other_extractor.py",
-    "analysis_script": "analysis/other_accuracy_analysis.py",
-    "output_folder": "OTHER_Package/outputs/other_accuracy",
+    "analysis_script": "analysis/other_visible_accuracy_analysis.py",
+    "output_folder": "OTHER_Package/outputs/other_visible_accuracy",
     "changelog": "OTHER_Package/CHANGELOG.md",
-    "notes": "Placeholder for the future OTHER file type."
+    "notes": "OTHER extractor and independent visible-PDF analysis are available."
   }
 }

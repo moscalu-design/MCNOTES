@@ -8,6 +8,7 @@ AFS Folder/
 GNG_Package/GNG File Folder/
 AFS_Package/AFS_File_Folder/
 OTHER_Package/OTHER_File_Folder/
+OTHER_Package/OTHER_File_Folder/**
 !OTHER_Package/OTHER_File_Folder/
 !OTHER_Package/OTHER_File_Folder/.gitkeep
 
