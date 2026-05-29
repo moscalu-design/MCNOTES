@@ -1,0 +1,16 @@
+.tools/
+__pycache__/
+*.py[cod]
+
+# Local source PDFs may contain company/confidential content.
+GNG Folder/*.pdf
+AFS Folder/*.pdf
+
+# Generated outputs can be rebuilt from the scripts and source PDFs.
+outputs/
+gng_word_counts*.csv
+gng_page*.png
+*.xlsx
+
+# Excel temporary lock files.
+~$*.xlsx

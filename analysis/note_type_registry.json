@@ -1,0 +1,17 @@
+{
+  "GNG": {
+    "enabled": true,
+    "folder": "GNG Folder",
+    "extractor": "gng_extractor.py",
+    "analysis_script": "analysis/gng_accuracy_analysis.py",
+    "output_folder": "outputs/gng_accuracy"
+  },
+  "AFS": {
+    "enabled": false,
+    "folder": "AFS Folder",
+    "extractor": "afs_extractor.py",
+    "analysis_script": "analysis/afs_accuracy_analysis.py",
+    "output_folder": "outputs/afs_accuracy",
+    "notes": "Placeholder for the future AFS file type."
+  }
+}
