@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MC Notes Data Observatory</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Dashboard filters">
+        <div class="brand-block">
+          <div class="brand-mark" aria-hidden="true">MC</div>
+          <div>
+            <h1>MC Notes</h1>
+            <p>Data Observatory</p>
+          </div>
+        </div>
+
+        <div class="filter-group">
+          <div class="filter-title">Template</div>
+          <div id="templateFilters" class="chip-grid" aria-label="Template filters"></div>
+        </div>
+
+        <div class="filter-group">
+          <div class="filter-title">Extraction</div>
+          <div id="extractionFilters" class="chip-grid" aria-label="Extraction filters"></div>
+        </div>
+
+        <div class="filter-group">
+          <label class="filter-title" for="batchFilter">Batch Folder</label>
+          <select id="batchFilter"></select>
+        </div>
+
+        <div class="filter-group">
+          <label class="filter-title" for="gedFilter">GED Match</label>
+          <select id="gedFilter"></select>
+        </div>
+
+        <div class="filter-group two-col">
+          <label>
+            <span class="filter-title">From</span>
+            <input id="dateFrom" type="date">
+          </label>
+          <label>
+            <span class="filter-title">To</span>
+            <input id="dateTo" type="date">
+          </label>
+        </div>
+
+        <div class="filter-group">
+          <label class="filter-title" for="searchInput">Search</label>
+          <input id="searchInput" type="search" placeholder="File, operation, type">
+        </div>
+
+        <div class="filter-group">
+          <label class="check-row">
+            <input id="hideFutureDates" type="checkbox">
+            <span>Hide future validation dates</span>
+          </label>
+          <label class="check-row">
+            <input id="onlyQualityIssues" type="checkbox">
+            <span>Only data-quality flags</span>
+          </label>
+        </div>
+
+        <div class="sidebar-actions">
+          <button id="resetFilters" class="ghost-button" type="button">Reset</button>
+          <button id="downloadFiltered" class="primary-button" type="button">Export CSV</button>
+        </div>
+      </aside>
+
+      <main class="main-panel">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Database tab analysis</p>
+            <h2>Interactive Dashboard</h2>
+          </div>
+          <div class="status-strip">
+            <span id="recordStatus">Loading data</span>
+            <span id="dateStatus"></span>
+          </div>
+        </header>
+
+        <section id="kpiGrid" class="kpi-grid" aria-label="Key metrics"></section>
+
+        <nav class="tabbar" aria-label="Dashboard views">
+          <button class="tab-button active" type="button" data-view="overview">Overview</button>
+          <button class="tab-button" type="button" data-view="time">Time Series</button>
+          <button class="tab-button" type="button" data-view="batches">Batch Folders</button>
+          <button class="tab-button" type="button" data-view="quality">Quality</button>
+          <button class="tab-button" type="button" data-view="records">Records</button>
+        </nav>
+
+        <section class="view active" data-view-panel="overview">
+          <div class="dashboard-grid">
+            <article class="panel wide">
+              <div class="panel-header">
+                <div>
+                  <h3>Word Count Distribution</h3>
+                  <p>Median, interquartile range, and outer spread by template.</p>
+                </div>
+                <select id="distributionMetric" class="compact-select">
+                  <option value="Text Before Opinions">Words</option>
+                  <option value="Document Page Count">Document Pages</option>
+                  <option value="Words Per Document Page">Words/Page</option>
+                </select>
+              </div>
+              <div id="boxChart" class="chart tall"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <h3>Template Mix</h3>
+                  <p>Document volume and share.</p>
+                </div>
+              </div>
+              <div id="templateDonut" class="chart"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <h3>Manual Rate</h3>
+                  <p>Correction load by template.</p>
+                </div>
+              </div>
+              <div id="manualRateChart" class="chart"></div>
+            </article>
+
+            <article class="panel wide">
+              <div class="panel-header">
+                <div>
+                  <h3>Department Word Share</h3>
+                  <p>Top department-coded word totals by active template selection.</p>
+                </div>
+              </div>
+              <div id="departmentChart" class="chart tall"></div>
+            </article>
+
+            <article class="panel wide">
+              <div class="panel-header">
+                <div>
+                  <h3>Pages vs Words</h3>
+                  <p>Each point is a document. Select a template in the legend by filtering left.</p>
+                </div>
+              </div>
+              <div id="scatterChart" class="chart tall"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" data-view-panel="time">
+          <div class="dashboard-grid">
+            <article class="panel full">
+              <div class="panel-header">
+                <div>
+                  <h3>Monthly Volume</h3>
+                  <p>Validation-month document count by template.</p>
+                </div>
+              </div>
+              <div id="timeVolumeChart" class="chart xlarge"></div>
+            </article>
+
+            <article class="panel full">
+              <div class="panel-header">
+                <div>
+                  <h3>Monthly Average Word Count</h3>
+                  <p>Filtered monthly mean with a three-month moving average.</p>
+                </div>
+              </div>
+              <div id="timeWordsChart" class="chart xlarge"></div>
+            </article>
+
+            <article class="panel full">
+              <div class="panel-header">
+                <div>
+                  <h3>Calendar Heatmap</h3>
+                  <p>Monthly document volume intensity.</p>
+                </div>
+              </div>
+              <div id="calendarHeatmap" class="heatmap"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" data-view-panel="batches">
+          <div class="dashboard-grid">
+            <article class="panel full">
+              <div class="panel-header">
+                <div>
+                  <h3>Batch Folder Ranking</h3>
+                  <p>Volume, mean words, manual rate, and quality flags.</p>
+                </div>
+                <select id="batchSort" class="compact-select">
+                  <option value="documents">Documents</option>
+                  <option value="manualRate">Manual Rate</option>
+                  <option value="meanWords">Mean Words</option>
+                  <option value="qualityFlags">Quality Flags</option>
+                </select>
+              </div>
+              <div id="batchChart" class="chart xlarge"></div>
+            </article>
+
+            <article class="panel full">
+              <div class="panel-header">
+                <div>
+                  <h3>Batch Folder Detail</h3>
+                  <p>Click a row to lock the batch filter.</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table id="batchTable"></table>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" data-view-panel="quality">
+          <div class="dashboard-grid">
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <h3>Quality Flags</h3>
+                  <p>Missing dates, future dates, annex gaps, and GED gaps.</p>
+                </div>
+              </div>
+              <div id="qualityChart" class="chart"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <h3>GED Match Status</h3>
+                  <p>Match-status distribution in the current filter.</p>
+                </div>
+              </div>
+              <div id="gedChart" class="chart"></div>
+            </article>
+
+            <article class="panel full">
+              <div class="panel-header">
+                <div>
+                  <h3>Flagged Records</h3>
+                  <p>Rows that need review before final statistical conclusions.</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table id="qualityTable"></table>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" data-view-panel="records">
+          <article class="panel full">
+            <div class="panel-header">
+              <div>
+                <h3>Document Explorer</h3>
+                <p>Sorted by word count by default.</p>
+              </div>
+              <div class="record-tools">
+                <select id="recordSort" class="compact-select">
+                  <option value="words-desc">Words high to low</option>
+                  <option value="words-asc">Words low to high</option>
+                  <option value="pages-desc">Pages high to low</option>
+                  <option value="date-desc">Newest first</option>
+                  <option value="manual-first">Manual first</option>
+                </select>
+                <button id="prevPage" class="ghost-button" type="button">Prev</button>
+                <span id="pageStatus"></span>
+                <button id="nextPage" class="ghost-button" type="button">Next</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table id="recordTable"></table>
+            </div>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <div id="tooltip" class="tooltip" role="status" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>

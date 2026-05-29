@@ -3,14 +3,30 @@ __pycache__/
 *.py[cod]
 
 # Local source PDFs may contain company/confidential content.
-GNG Folder/*.pdf
-AFS Folder/*.pdf
+GNG Folder/
+AFS Folder/
+GNG_Package/GNG File Folder/
+AFS_Package/AFS_File_Folder/
+OTHER_Package/OTHER_File_Folder/
+!OTHER_Package/OTHER_File_Folder/
+!OTHER_Package/OTHER_File_Folder/.gitkeep
 
 # Generated outputs can be rebuilt from the scripts and source PDFs.
 outputs/
+GNG_Package/outputs/
+AFS_Package/outputs/
+OTHER_Package/outputs/
 gng_word_counts*.csv
 gng_page*.png
 *.xlsx
+Full Database/
+Data Analysis/*.csv
+Data Analysis/*.json
+Data Analysis/*.png
+Data Analysis/charts/
 
 # Excel temporary lock files.
 ~$*.xlsx
+
+# Python cache folders at any depth.
+**/__pycache__/

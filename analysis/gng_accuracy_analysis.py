@@ -17,8 +17,8 @@ from openpyxl.utils import get_column_letter
 
 
 ROOT = Path(__file__).resolve().parents[1]
-GNG_DIR = ROOT / "GNG Folder"
-OUTPUT_DIR = ROOT / "outputs" / "gng_accuracy"
+GNG_DIR = ROOT / "GNG_Package" / "GNG File Folder"
+OUTPUT_DIR = ROOT / "GNG_Package" / "outputs" / "gng_accuracy"
 LIMIT = 25
 DEFAULT_SEED = 20260529
 
@@ -67,7 +67,10 @@ NOISE_LINE_RE = re.compile(
 
 
 def load_gng_module():
-    spec = importlib.util.spec_from_file_location("gng_extractor", ROOT / "gng_extractor.py")
+    spec = importlib.util.spec_from_file_location(
+        "gng_extractor",
+        ROOT / "GNG_Package" / "gng_extractor.py"
+    )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

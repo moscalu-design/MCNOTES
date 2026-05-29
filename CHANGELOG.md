@@ -9,6 +9,15 @@ This log records material changes made to the local GNG extraction project.
 - Created empty GitHub repository `moscalu-design/MCNOTES`.
 - Added `README.md` with setup and run instructions.
 - Added `requirements.txt` for Python dependencies.
+- Added dedicated package folders:
+  - `GNG_Package`
+  - `AFS_Package`
+  - `OTHER_Package`
+- Added package-level changelogs:
+  - `GNG_Package/CHANGELOG.md`
+  - `AFS_Package/CHANGELOG.md`
+  - `OTHER_Package/CHANGELOG.md`
+- Added `Data Analysis/CHANGELOG.md` and kept `Data Analysis` as a dedicated database/dashboard analysis section.
 - Added random/reproducible sampling options to `analysis/gng_accuracy_analysis.py`:
   - `--limit`
   - `--sample first|random`
@@ -40,7 +49,11 @@ This log records material changes made to the local GNG extraction project.
 
 ### Changed
 
-- Changed default GNG input folder from `GNG_Package/Missing` to `GNG Folder` to match the local project structure.
+- Moved the GNG extractor into `GNG_Package/gng_extractor.py`.
+- Moved local GNG analysis outputs under `GNG_Package/outputs`.
+- Updated registry paths for GNG, AFS, and OTHER package homes.
+- Updated ignore rules so source PDFs, generated outputs, database exports, and workbook files stay local.
+- Changed default GNG input folder from the earlier placeholder paths to `GNG_Package/GNG File Folder`.
 - Updated operation-number extraction to fall back to PDF text when the number is not present in the filename.
 - Added CSV write fallback logic so if `gng_word_counts.csv` is open in Excel, the script writes `gng_word_counts_new.csv` instead of failing.
 - Improved debug segmentation by merging consecutive matches for the same prefix into a single service block.

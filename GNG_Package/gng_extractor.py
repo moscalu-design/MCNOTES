@@ -13,7 +13,7 @@ DEBUG = False
 STATUS_OUTPUT = DEBUG
 DEBUG_TEXT_CHAR_LIMIT = None
 
-GNG_DIR = Path("GNG Folder")
+GNG_DIR = Path(__file__).resolve().parent / "GNG File Folder"
 
 
 CSV_PREFIXES = [
@@ -1479,7 +1479,7 @@ def parse_args():
         nargs="?",
         type=Path,
         default=GNG_DIR,
-        help="Folder containing GNG PDF files. Defaults to 'GNG Folder'."
+        help="Folder containing GNG PDF files. Defaults to GNG_Package/GNG File Folder."
     )
     parser.add_argument(
         "--debug",
