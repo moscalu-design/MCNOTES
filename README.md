@@ -38,6 +38,12 @@ python .\gng_extractor.py "GNG Folder" --debug
 python .\analysis\run_analysis.py GNG
 ```
 
+Random reproducible sample:
+
+```powershell
+python .\analysis\run_analysis.py GNG --limit 150 --sample random --seed 20260529 --output-dir outputs/gng_accuracy_random_150
+```
+
 The analysis writes local outputs under:
 
 ```text

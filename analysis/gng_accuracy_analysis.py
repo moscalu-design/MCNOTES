@@ -1,7 +1,9 @@
+import argparse
 import csv
 import html
 import importlib.util
 import json
+import random
 import re
 from collections import Counter, defaultdict
 from datetime import datetime
@@ -18,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 GNG_DIR = ROOT / "GNG Folder"
 OUTPUT_DIR = ROOT / "outputs" / "gng_accuracy"
 LIMIT = 25
+DEFAULT_SEED = 20260529
 
 CSV_PREFIXES = [
     "OPS", "GLO", "PJ", "RM", "OCCO", "JU", "ECON",
@@ -498,6 +501,9 @@ def write_workbook(path, overall, field_stats, document_rows, comparison_rows, s
         ["Overall match rate", overall["Overall Match Rate"]],
         ["Perfect documents", overall["Perfect Documents"]],
         ["Counting basis", "Full service block count"],
+        ["Sample method", overall.get("Sample Method", "")],
+        ["Random seed", overall.get("Random Seed", "")],
+        ["Available PDFs", overall.get("Available PDFs", "")],
         ["Generated", datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
     ]
     for row in summary_rows:
@@ -555,6 +561,17 @@ def write_html(path, overall, field_stats, document_rows, comparison_rows, selec
             cells.append("</tr>")
         cells.append("</tbody></table>")
         return "".join(cells)
+
+    sample_phrase = (
+        f"{overall['Documents']}-document {overall.get('Sample Method', '').lower()} sample"
+        if overall.get("Sample Method")
+        else f"{overall['Documents']}-document sample"
+    )
+    seed_text = (
+        f" Random seed: {overall.get('Random Seed')}."
+        if overall.get("Random Seed") not in {"", None}
+        else ""
+    )
 
     html_text = f"""<!doctype html>
 <html lang="en">
@@ -665,7 +682,7 @@ def write_html(path, overall, field_stats, document_rows, comparison_rows, selec
 <body>
   <header>
     <h1>GNG Script Accuracy Analysis</h1>
-    <p>25-document sample, comparing script output against independently extracted visible PDF values. Counting basis: full service block count.</p>
+    <p>{html.escape(sample_phrase)}, comparing script output against independently extracted visible PDF values. Counting basis: full service block count.{html.escape(seed_text)}</p>
   </header>
   <main>
     <div class="grid">
@@ -679,6 +696,7 @@ def write_html(path, overall, field_stats, document_rows, comparison_rows, selec
       <h2>Executive Summary</h2>
       <p class="note">The independent check reads the PDF through visible word positions and line geometry. It then compares those values to the script output field-by-field. Empty prefix columns are treated as matches when both script and visible extraction are blank.</p>
       <p class="note">The most important review areas are fields with low match rate or large numeric deltas. See the detailed CSV/workbook for every document-field comparison.</p>
+      <p class="note">Sampling: {html.escape(str(overall.get("Sample Method", "")))} from {overall.get("Available PDFs", "")} available PDFs.{html.escape(seed_text)}</p>
     </section>
 
     <section>
@@ -707,10 +725,61 @@ def write_html(path, overall, field_stats, document_rows, comparison_rows, selec
     path.write_text(html_text, encoding="utf-8")
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Compare GNG extractor output with visible-PDF actuals.")
+    parser.add_argument("--limit", type=int, default=LIMIT, help="Number of PDFs to analyse.")
+    parser.add_argument(
+        "--sample",
+        choices=["first", "random"],
+        default="first",
+        help="Sample method. 'first' uses filename sort order; 'random' uses --seed."
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=DEFAULT_SEED,
+        help="Random seed used when --sample random is selected."
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=OUTPUT_DIR,
+        help="Output directory for CSV, workbook, and HTML report."
+    )
+    return parser.parse_args()
+
+
+def select_pdf_files(pdf_files, limit, sample_method, seed):
+    pdf_files = sorted(pdf_files)
+
+    if limit <= 0:
+        raise SystemExit("--limit must be greater than zero")
+
+    if limit > len(pdf_files):
+        raise SystemExit(f"Requested {limit} PDFs, but only {len(pdf_files)} PDFs are available.")
+
+    if sample_method == "random":
+        rng = random.Random(seed)
+        return sorted(rng.sample(pdf_files, limit))
+
+    return pdf_files[:limit]
+
+
 def main():
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    args = parse_args()
+    output_dir = args.output_dir
+    if not output_dir.is_absolute():
+        output_dir = ROOT / output_dir
+
+    output_dir.mkdir(parents=True, exist_ok=True)
     gng = load_gng_module()
-    pdf_files = sorted(GNG_DIR.rglob("*.pdf"))[:LIMIT]
+    available_pdf_files = sorted(GNG_DIR.rglob("*.pdf"))
+    pdf_files = select_pdf_files(
+        available_pdf_files,
+        args.limit,
+        args.sample,
+        args.seed
+    )
 
     script_rows = []
     actual_rows = []
@@ -774,15 +843,20 @@ def main():
         })
 
     overall, field_stats = calculate_stats(comparison_rows, document_rows)
+    overall.update({
+        "Sample Method": args.sample,
+        "Random Seed": args.seed if args.sample == "random" else "",
+        "Available PDFs": len(available_pdf_files),
+    })
 
-    comparison_csv = OUTPUT_DIR / "gng_accuracy_field_comparison.csv"
-    document_csv = OUTPUT_DIR / "gng_accuracy_document_summary.csv"
-    field_stats_csv = OUTPUT_DIR / "gng_accuracy_field_stats.csv"
-    script_csv = OUTPUT_DIR / "gng_script_output_25.csv"
-    actual_csv = OUTPUT_DIR / "gng_visible_actuals_25.csv"
-    debug_csv = OUTPUT_DIR / "gng_visible_extraction_debug.csv"
-    workbook_path = OUTPUT_DIR / "gng_accuracy_analysis.xlsx"
-    html_path = OUTPUT_DIR / "index.html"
+    comparison_csv = output_dir / "gng_accuracy_field_comparison.csv"
+    document_csv = output_dir / "gng_accuracy_document_summary.csv"
+    field_stats_csv = output_dir / "gng_accuracy_field_stats.csv"
+    script_csv = output_dir / f"gng_script_output_{len(pdf_files)}.csv"
+    actual_csv = output_dir / f"gng_visible_actuals_{len(pdf_files)}.csv"
+    debug_csv = output_dir / "gng_visible_extraction_debug.csv"
+    workbook_path = output_dir / "gng_accuracy_analysis.xlsx"
+    html_path = output_dir / "index.html"
 
     write_csv(comparison_csv, comparison_rows, list(comparison_rows[0].keys()))
     write_csv(document_csv, document_rows, list(document_rows[0].keys()))

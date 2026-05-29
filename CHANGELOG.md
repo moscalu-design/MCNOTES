@@ -9,6 +9,12 @@ This log records material changes made to the local GNG extraction project.
 - Created empty GitHub repository `moscalu-design/MCNOTES`.
 - Added `README.md` with setup and run instructions.
 - Added `requirements.txt` for Python dependencies.
+- Added random/reproducible sampling options to `analysis/gng_accuracy_analysis.py`:
+  - `--limit`
+  - `--sample first|random`
+  - `--seed`
+  - `--output-dir`
+- Updated `analysis/run_analysis.py` to pass through analysis arguments to registered note-type scripts.
 - Added `gng_extractor.py` as the local runnable GNG extraction script.
 - Added command-line arguments to `gng_extractor.py`:
   - optional input folder path
@@ -49,6 +55,7 @@ This log records material changes made to the local GNG extraction project.
   - `openpyxl`
 - Ran `gng_extractor.py` successfully on the uploaded GNG PDFs.
 - Ran `analysis/run_analysis.py GNG` successfully.
+- Ran `analysis/run_analysis.py GNG --limit 150 --sample random --seed 20260529 --output-dir outputs/gng_accuracy_random_150` successfully.
 - Ran syntax checks with `py_compile` on:
   - `gng_extractor.py`
   - `analysis/gng_accuracy_analysis.py`
@@ -72,6 +79,25 @@ This log records material changes made to the local GNG extraction project.
   - `OCCO`
 - Main remaining difference area:
   - `Text Before Opinions`, usually off by a small number of words because text-stream extraction and visible-PDF line extraction tokenize some pre-opinion content slightly differently.
+- Random 150-PDF sample accuracy summary:
+  - Available PDFs: `178`.
+  - Sample method: random.
+  - Random seed: `20260529`.
+  - Analysed PDFs: `150`.
+  - Compared fields: `4050`.
+  - Overall exact field match rate: `96.840%`.
+  - Total mismatches: `128`.
+  - Perfect documents: `47`.
+  - Fields with 150/150 exact matches included:
+    - `Operation Number`
+    - `Validation Date`
+    - `Author`
+    - `Document Page Count`
+    - `Page count before opinion`
+    - `Annex Page Count`
+    - `OCCO`
+  - Main remaining difference area:
+    - `Text Before Opinions`, with 53/150 exact matches, mean absolute delta `1.83` words, and max delta `40` words.
 
 ### Notes
 
