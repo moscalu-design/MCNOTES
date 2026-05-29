@@ -7,7 +7,7 @@ Utilities for extracting and validating MC note data from GNG and AFS PDFs.
 - `GNG_Package/gng_extractor.py` extracts GNG metadata and full service-block word counts from PDFs.
 - `AFS_Package/afs_extractor.py` extracts AFS metadata, opinion word counts, and AFS summary statistics from PDFs.
 - `analysis/gng_accuracy_analysis.py` compares script output against an independent visible-PDF extraction for a 25-document sample.
-- `analysis/afs_accuracy_analysis.py` compares AFS script output against the cleaned database.
+- `analysis/afs_visible_accuracy_analysis.py` compares AFS script output against an independent visible-PDF extraction.
 - `analysis/run_analysis.py` runs registered note-type analyses.
 - `analysis/note_type_registry.json` defines the enabled GNG and AFS workflows and the future OTHER placeholder.
 - `GNG_Package`, `AFS_Package`, and `OTHER_Package` are dedicated spaces for each extractor family.
@@ -71,7 +71,7 @@ GNG_Package/outputs/gng_accuracy/
 python .\AFS_Package\afs_extractor.py
 ```
 
-Compare AFS output against the cleaned database:
+Compare AFS output against an independent visible-PDF extraction:
 
 ```powershell
 python .\analysis\run_analysis.py AFS

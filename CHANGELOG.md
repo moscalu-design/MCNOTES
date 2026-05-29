@@ -8,16 +8,19 @@ This log records material changes made to the local GNG extraction project.
 
 - Added the AFS extractor in `AFS_Package/afs_extractor.py`.
 - Added repeatable AFS database-comparison analysis in `analysis/afs_accuracy_analysis.py`.
+- Added repeatable AFS independent visible-PDF analysis in `analysis/afs_visible_accuracy_analysis.py`.
 
 ### Changed
 
 - Enabled AFS in `analysis/note_type_registry.json`.
 - Added operation-number fallback from PDF text for AFS files without operation numbers in the filename.
+- Pointed the registered AFS analysis runner at the independent visible-PDF audit.
 
 ### Tested
 
 - Ran the AFS extractor across all 123 PDFs in `AFS_Package/AFS_File_Folder`.
 - Compared the AFS output against `Data Analysis/cleaned_database.csv`; 3,319 of 3,321 fields matched.
+- Compared the AFS output against independently rebuilt visible PDF text; 3,020 of 3,321 fields matched exactly.
 
 ## 2026-05-29
 
