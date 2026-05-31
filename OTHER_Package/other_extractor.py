@@ -4,6 +4,7 @@ import csv
 import math
 import re
 import statistics
+import unicodedata
 from collections import defaultdict
 from pathlib import Path
 
@@ -118,6 +119,68 @@ def clean_cell_value(value) -> str:
     return re.sub(r"\s+", " ", str(value).strip())
 
 
+def repair_mojibake_text(value: str) -> str:
+    text = str(value or "")
+    replacements = {
+        "\u00e2\u20ac\u201c": "\u2013",
+        "\u00e2\u20ac\u0093": "\u2013",
+        "\u00e2\u20ac\u201d": "\u2014",
+        "\u00e2\u20ac\u0094": "\u2014",
+        "\u00e2\u20ac\u02dc": "\u2018",
+        "\u00e2\u20ac\u2122": "\u2019",
+        "\u00e2\u20ac\u0153": "\u201c",
+        "\u00e2\u20ac\u009d": "\u201d",
+        "\u00e2\u20ac\u00a6": "\u2026",
+        "\u00c2\u00a0": " ",
+    }
+    for bad, good in replacements.items():
+        text = text.replace(bad, good)
+
+    for _ in range(2):
+        if not any(marker in text for marker in ("\u00c3", "\u00c2", "\u00e2", "\u20ac", "\ufffd")):
+            break
+        try:
+            fixed = text.encode("cp1252").decode("utf-8")
+        except UnicodeError:
+            break
+        if fixed == text:
+            break
+        text = fixed
+
+    return unicodedata.normalize("NFC", text)
+
+
+def clean_export_value(value):
+    if isinstance(value, str):
+        return repair_mojibake_text(value)
+    return value
+
+
+def format_iso_date_ddmmyyyy(value: str) -> str:
+    match = re.fullmatch(r"(20\d{2})-(\d{2})-(\d{2})", str(value or "").strip())
+    if not match:
+        return ""
+    yyyy, mm, dd = match.groups()
+    return f"{dd}/{mm}/{yyyy}"
+
+
+def normalize_validation_date(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+
+    iso_date = format_iso_date_ddmmyyyy(text)
+    if iso_date:
+        return iso_date
+
+    match = re.fullmatch(r"(\d{2})[/.](\d{2})[/.](20\d{2})", text)
+    if match:
+        dd, mm, yyyy = match.groups()
+        return f"{dd}/{mm}/{yyyy}"
+
+    return text
+
+
 def header_key(value) -> str:
     return normalize_for_match(value)
 
@@ -140,6 +203,13 @@ def clean_author_line(line: str) -> str:
 
 def count_words(text: str):
     return len(WORD_RE.findall(str(text or "")))
+
+
+def open_pdf(pdf_path: Path):
+    filename = str(Path(pdf_path).resolve())
+    if len(filename) >= 240 and not filename.startswith("\\\\?\\"):
+        filename = f"\\\\?\\{filename}"
+    return fitz.open(filename)
 
 
 def canonicalize_merge_to(value: str) -> str:
@@ -219,7 +289,7 @@ def load_prefix_merge_mapping(folder_path: Path):
 
 
 def extract_text_from_pdf(pdf_path: Path):
-    with fitz.open(pdf_path) as doc:
+    with open_pdf(pdf_path) as doc:
         page_texts = [page.get_text("text") or "" for page in doc]
     return "\n".join(page_texts), len(page_texts), page_texts
 
@@ -229,7 +299,7 @@ def extract_mc_metadata(filename: str):
     match_date = DATE_RE.search(filename)
     return (
         match_type.group(1).upper() if match_type else None,
-        match_date.group(1) if match_date else None,
+        format_iso_date_ddmmyyyy(match_date.group(1)) if match_date else None,
     )
 
 
@@ -255,7 +325,7 @@ def is_valid_author_line(line: str) -> bool:
 
 
 def extract_author_from_first_page(pdf_path: Path):
-    with fitz.open(pdf_path) as doc:
+    with open_pdf(pdf_path) as doc:
         if len(doc) == 0:
             return None
         page1 = doc[0].get_text("text") or ""
@@ -268,7 +338,7 @@ def extract_author_from_first_page(pdf_path: Path):
 
 
 def extract_top_right_text_page1(pdf_path: Path, x_frac=0.55, y_frac=0.40):
-    with fitz.open(pdf_path) as doc:
+    with open_pdf(pdf_path) as doc:
         if len(doc) == 0:
             return ""
         page = doc[0]
@@ -317,7 +387,7 @@ def extract_doc_date_and_author_top_right(pdf_path: Path):
     for idx, line in enumerate(lines):
         match = DOC_DATE_RE.search(line)
         if match:
-            doc_date = match.group(1)
+            doc_date = normalize_validation_date(match.group(1))
             date_idx = idx
             debug_info["date_method"] = "top-right DD/MM/YYYY"
             debug_info["date_trigger_text"] = line
@@ -327,8 +397,7 @@ def extract_doc_date_and_author_top_right(pdf_path: Path):
         for idx, line in enumerate(lines):
             match = ISO_DATE_RE.search(line)
             if match:
-                yyyy, mm, dd = match.group(1).split("-")
-                doc_date = f"{dd}/{mm}/{yyyy}"
+                doc_date = format_iso_date_ddmmyyyy(match.group(1))
                 date_idx = idx
                 debug_info["date_method"] = "top-right ISO date converted"
                 debug_info["date_trigger_text"] = line
@@ -583,7 +652,7 @@ def build_base_row(pdf_file, mc_type, operation_number, validation_date, author,
         "MC_Note_Type": mc_type if mc_type else NA_VALUE,
         "File": pdf_file.name,
         "Operation Number": operation_number,
-        "Validation Date": validation_date if validation_date else NA_VALUE,
+        "Validation Date": normalize_validation_date(validation_date) if validation_date else NA_VALUE,
         "Author": author if author else NA_VALUE,
         "Page_Count": page_count,
         "Page count before opinion": text_before_debug["page_count_before_opinion"],
@@ -693,10 +762,14 @@ def build_statistics_rows(output_prefixes, group_values):
 
 
 def write_csv(rows, output_csv: Path, fieldnames):
-    with output_csv.open("w", newline="", encoding="utf-8") as file:
+    cleaned_rows = [
+        {key: clean_export_value(value) for key, value in row.items()}
+        for row in rows
+    ]
+    with output_csv.open("w", newline="", encoding="utf-8-sig") as file:
         writer = csv.DictWriter(file, fieldnames=fieldnames)
         writer.writeheader()
-        writer.writerows(rows)
+        writer.writerows(cleaned_rows)
 
 
 def write_csv_with_fallback(rows, output_csv: Path, fieldnames):

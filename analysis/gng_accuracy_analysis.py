@@ -550,17 +550,24 @@ def write_html(path, overall, field_stats, document_rows, comparison_rows, selec
     mismatches = [row for row in comparison_rows if row["Match"] == "NO"]
 
     def table(rows, columns):
-        cells = ["<table><thead><tr>"]
-        for column in columns:
-            cells.append(f"<th>{html.escape(column)}</th>")
+        cells = ['<table class="sortable-table"><thead><tr>']
+        for index, column in enumerate(columns):
+            cells.append(
+                f'<th><button type="button" data-sort-column="{index}">'
+                f'{html.escape(column)}<span class="sort-indicator"></span></button></th>'
+            )
         cells.append("</tr></thead><tbody>")
         for row in rows:
             cells.append("<tr>")
             for column in columns:
                 value = row.get(column, "")
+                sort_value = value
                 if isinstance(value, float) and "Rate" in column:
                     value = percent(value)
-                cells.append(f"<td>{html.escape(str(value))}</td>")
+                cells.append(
+                    f'<td data-sort-value="{html.escape(str(sort_value), quote=True)}">'
+                    f'{html.escape(str(value))}</td>'
+                )
             cells.append("</tr>")
         cells.append("</tbody></table>")
         return "".join(cells)
@@ -666,6 +673,27 @@ def write_html(path, overall, field_stats, document_rows, comparison_rows, selec
       color: #263244;
       font-weight: 700;
     }}
+    th button {{
+      all: unset;
+      box-sizing: border-box;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      width: 100%;
+    }}
+    th button:focus-visible {{
+      outline: 2px solid var(--blue);
+      outline-offset: 2px;
+    }}
+    .sort-indicator {{
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+      min-width: 24px;
+      text-align: right;
+    }}
     .note {{
       color: var(--muted);
       line-height: 1.45;
@@ -722,6 +750,50 @@ def write_html(path, overall, field_stats, document_rows, comparison_rows, selec
       <div class="files">{"<br>".join(html.escape(path.name) for path in selected_files)}</div>
     </section>
   </main>
+  <script>
+    (() => {{
+      function sortableValue(cell) {{
+        const raw = (cell.dataset.sortValue || cell.textContent || "").trim();
+        const numeric = raw.replace(/,/g, "").replace(/%$/, "");
+        if (numeric !== "" && !Number.isNaN(Number(numeric))) {{
+          return {{ type: "number", value: Number(numeric) }};
+        }}
+        return {{ type: "text", value: raw.toLowerCase() }};
+      }}
+
+      document.querySelectorAll(".sortable-table").forEach((table) => {{
+        const tbody = table.tBodies[0];
+        table.querySelectorAll("th button").forEach((button) => {{
+          button.addEventListener("click", () => {{
+            const columnIndex = Number(button.dataset.sortColumn);
+            const current = button.getAttribute("aria-sort");
+            const direction = current === "ascending" ? "descending" : "ascending";
+
+            table.querySelectorAll("th button").forEach((header) => {{
+              header.removeAttribute("aria-sort");
+              const indicator = header.querySelector(".sort-indicator");
+              if (indicator) indicator.textContent = "";
+            }});
+
+            button.setAttribute("aria-sort", direction);
+            const indicator = button.querySelector(".sort-indicator");
+            if (indicator) indicator.textContent = direction === "ascending" ? "asc" : "desc";
+
+            const rows = Array.from(tbody.rows);
+            rows.sort((left, right) => {{
+              const a = sortableValue(left.cells[columnIndex]);
+              const b = sortableValue(right.cells[columnIndex]);
+              const result = a.type === "number" && b.type === "number"
+                ? a.value - b.value
+                : String(a.value).localeCompare(String(b.value), undefined, {{ numeric: true, sensitivity: "base" }});
+              return direction === "ascending" ? result : -result;
+            }});
+            rows.forEach((row) => tbody.appendChild(row));
+          }});
+        }});
+      }});
+    }})();
+  </script>
 </body>
 </html>
 """

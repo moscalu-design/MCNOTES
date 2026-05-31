@@ -12,7 +12,7 @@
     "folder": "AFS_Package/AFS_File_Folder",
     "extractor": "AFS_Package/afs_extractor.py",
     "analysis_script": "analysis/afs_visible_accuracy_analysis.py",
-    "output_folder": "AFS_Package/outputs/afs_accuracy",
+    "output_folder": "AFS_Package/outputs/afs_visible_accuracy",
     "changelog": "AFS_Package/CHANGELOG.md",
     "notes": "AFS extractor and independent visible-PDF analysis are available."
   },

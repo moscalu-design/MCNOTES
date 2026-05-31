@@ -25,6 +25,9 @@ Data Analysis/*.csv
 Data Analysis/*.json
 Data Analysis/*.png
 Data Analysis/charts/
+Data Analysis/Exports/
+Data Analysis/Screenshots/
+Data Analysis/Workbooks/
 
 # Excel temporary lock files.
 ~$*.xlsx

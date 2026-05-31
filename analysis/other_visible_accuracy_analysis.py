@@ -523,17 +523,24 @@ def write_html(path, overall, field_stats, document_rows, comparison_rows):
     mismatches = [row for row in comparison_rows if row["Match"] == "NO"]
 
     def table(rows, columns):
-        parts = ["<table><thead><tr>"]
-        for column in columns:
-            parts.append(f"<th>{html.escape(column)}</th>")
+        parts = ['<table class="sortable-table"><thead><tr>']
+        for index, column in enumerate(columns):
+            parts.append(
+                f'<th><button type="button" data-sort-column="{index}">'
+                f'{html.escape(column)}<span class="sort-indicator"></span></button></th>'
+            )
         parts.append("</tr></thead><tbody>")
         for row in rows:
             parts.append("<tr>")
             for column in columns:
                 value = row.get(column, "")
+                sort_value = value
                 if isinstance(value, float) and "Rate" in column:
                     value = percent(value)
-                parts.append(f"<td>{html.escape(str(value))}</td>")
+                parts.append(
+                    f'<td data-sort-value="{html.escape(str(sort_value), quote=True)}">'
+                    f'{html.escape(str(value))}</td>'
+                )
             parts.append("</tr>")
         parts.append("</tbody></table>")
         return "".join(parts)
@@ -555,6 +562,9 @@ def write_html(path, overall, field_stats, document_rows, comparison_rows):
     table {{ border-collapse: collapse; width: 100%; font-size: 13px; }}
     th, td {{ border-bottom: 1px solid #dbe3ef; padding: 8px 10px; text-align: left; vertical-align: top; }}
     th {{ background: #eef2f7; }}
+    th button {{ all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; }}
+    th button:focus-visible {{ outline: 2px solid #1d4ed8; outline-offset: 2px; }}
+    .sort-indicator {{ color: #64748b; font-size: 11px; font-weight: 600; min-width: 24px; text-align: right; }}
     p {{ color: #64748b; line-height: 1.45; }}
   </style>
 </head>
@@ -575,6 +585,50 @@ def write_html(path, overall, field_stats, document_rows, comparison_rows):
     <section><h2>Documents With Most Differences</h2>{table(worst_docs, ["File", "Matched Fields", "Compared Fields", "Mismatched Fields", "Match Rate", "Mismatch Fields"])}</section>
     <section><h2>Mismatch Detail</h2>{table(mismatches[:160], ["File", "Field", "Script Value", "Visible Value", "Numeric Delta"])}</section>
   </main>
+  <script>
+    (() => {{
+      function sortableValue(cell) {{
+        const raw = (cell.dataset.sortValue || cell.textContent || "").trim();
+        const numeric = raw.replace(/,/g, "").replace(/%$/, "");
+        if (numeric !== "" && !Number.isNaN(Number(numeric))) {{
+          return {{ type: "number", value: Number(numeric) }};
+        }}
+        return {{ type: "text", value: raw.toLowerCase() }};
+      }}
+
+      document.querySelectorAll(".sortable-table").forEach((table) => {{
+        const tbody = table.tBodies[0];
+        table.querySelectorAll("th button").forEach((button) => {{
+          button.addEventListener("click", () => {{
+            const columnIndex = Number(button.dataset.sortColumn);
+            const current = button.getAttribute("aria-sort");
+            const direction = current === "ascending" ? "descending" : "ascending";
+
+            table.querySelectorAll("th button").forEach((header) => {{
+              header.removeAttribute("aria-sort");
+              const indicator = header.querySelector(".sort-indicator");
+              if (indicator) indicator.textContent = "";
+            }});
+
+            button.setAttribute("aria-sort", direction);
+            const indicator = button.querySelector(".sort-indicator");
+            if (indicator) indicator.textContent = direction === "ascending" ? "asc" : "desc";
+
+            const rows = Array.from(tbody.rows);
+            rows.sort((left, right) => {{
+              const a = sortableValue(left.cells[columnIndex]);
+              const b = sortableValue(right.cells[columnIndex]);
+              const result = a.type === "number" && b.type === "number"
+                ? a.value - b.value
+                : String(a.value).localeCompare(String(b.value), undefined, {{ numeric: true, sensitivity: "base" }});
+              return direction === "ascending" ? result : -result;
+            }});
+            rows.forEach((row) => tbody.appendChild(row));
+          }});
+        }});
+      }});
+    }})();
+  </script>
 </body>
 </html>
 """

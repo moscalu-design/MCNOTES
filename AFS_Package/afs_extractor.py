@@ -4,6 +4,7 @@ import csv
 import math
 import re
 import statistics
+import unicodedata
 from collections import Counter
 from contextlib import closing
 from pathlib import Path
@@ -157,8 +158,45 @@ def count_words_and_text(s: str):
     return len(WORD_RE.findall(count_text)), count_text
 
 
+def repair_mojibake_text(value: str) -> str:
+    text = str(value or "")
+    replacements = {
+        "\u00e2\u20ac\u201c": "\u2013",
+        "\u00e2\u20ac\u0093": "\u2013",
+        "\u00e2\u20ac\u201d": "\u2014",
+        "\u00e2\u20ac\u0094": "\u2014",
+        "\u00e2\u20ac\u02dc": "\u2018",
+        "\u00e2\u20ac\u2122": "\u2019",
+        "\u00e2\u20ac\u0153": "\u201c",
+        "\u00e2\u20ac\u009d": "\u201d",
+        "\u00e2\u20ac\u00a6": "\u2026",
+        "\u00c2\u00a0": " ",
+    }
+    for bad, good in replacements.items():
+        text = text.replace(bad, good)
+
+    for _ in range(2):
+        if not any(marker in text for marker in ("\u00c3", "\u00c2", "\u00e2", "\u20ac", "\ufffd")):
+            break
+        try:
+            fixed = text.encode("cp1252").decode("utf-8")
+        except UnicodeError:
+            break
+        if fixed == text:
+            break
+        text = fixed
+
+    return unicodedata.normalize("NFC", text)
+
+
+def clean_export_value(value):
+    if isinstance(value, str):
+        return repair_mojibake_text(value)
+    return value
+
+
 def clean_for_csv_title(value: str) -> str:
-    return str(value).replace(",", "")
+    return repair_mojibake_text(value).replace(",", "")
 
 
 def debug_text_block(text: str) -> str:
@@ -1360,14 +1398,18 @@ def process_pdf(pdf_path: Path):
 
 
 def write_raw_csv(rows, output_path: Path):
-    with open(output_path, "w", newline="", encoding="utf-8") as file:
+    cleaned_rows = [
+        {key: clean_export_value(value) for key, value in row.items()}
+        for row in rows
+    ]
+    with open(output_path, "w", newline="", encoding="utf-8-sig") as file:
         writer = csv.DictWriter(file, fieldnames=RAW_FIELDNAMES, delimiter=";")
         writer.writeheader()
-        writer.writerows(rows)
+        writer.writerows(cleaned_rows)
 
 
 def write_statistics_csv(rows_numeric, output_path: Path):
-    with open(output_path, "w", newline="", encoding="utf-8") as file:
+    with open(output_path, "w", newline="", encoding="utf-8-sig") as file:
         writer = csv.writer(file, delimiter=",")
         writer.writerow(STAT_FIELDNAMES)
 

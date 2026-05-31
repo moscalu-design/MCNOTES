@@ -17,6 +17,7 @@ RECORD_COLUMNS = [
     "File Name",
     "Operation Number",
     "Validation Date",
+    "Author",
     "Validation Month",
     "Validation Year",
     "Document Page Count",

@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>MC Notes Data Observatory</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=20260529-deep">
   </head>
   <body>
     <div class="app-shell">
@@ -19,6 +19,11 @@
             <h1>EIB MC Notes</h1>
             <p>Operations text analytics</p>
           </div>
+        </div>
+
+        <div class="filter-caption">
+          <span>Report Slicers</span>
+          <button id="collapseSlicers" class="icon-button" type="button" title="Compact slicers">≡</button>
         </div>
 
         <div class="filter-group">
@@ -75,22 +80,40 @@
       </aside>
 
       <main class="main-panel">
-        <header class="topbar">
-          <div>
+        <header class="report-header">
+          <div class="report-title-block">
             <p class="eyebrow">Database tab analysis</p>
-            <h2>Interactive Dashboard</h2>
+            <h2>MC Notes Report</h2>
           </div>
-          <div class="status-strip">
-            <span id="recordStatus">Loading data</span>
-            <span id="dateStatus"></span>
+          <div class="report-toolbar" aria-label="Report toolbar">
+            <button id="focusServices" class="toolbar-button" type="button">Service Pulse</button>
+            <button id="focusTests" class="toolbar-button" type="button">Data Tests</button>
+            <button id="clearAllFilters" class="toolbar-button primary-toolbar" type="button">Clear Filters</button>
           </div>
         </header>
+
+        <section class="report-strip" aria-label="Report status">
+          <div class="status-tile">
+            <span>Rows</span>
+            <strong id="recordStatus">Loading data</strong>
+          </div>
+          <div class="status-tile">
+            <span>Date Span</span>
+            <strong id="dateStatus"></strong>
+          </div>
+          <div class="status-tile wide-status">
+            <span>Active Filters</span>
+            <strong id="activeFilterStatus">All records</strong>
+          </div>
+        </section>
 
         <section id="kpiGrid" class="kpi-grid" aria-label="Key metrics"></section>
 
         <nav class="tabbar" aria-label="Dashboard views">
           <button class="tab-button active" type="button" data-view="overview">Overview</button>
           <button class="tab-button" type="button" data-view="time">Time Series</button>
+          <button class="tab-button" type="button" data-view="services">Services</button>
+          <button class="tab-button" type="button" data-view="authors">Authors</button>
           <button class="tab-button" type="button" data-view="batches">Batch Folders</button>
           <button class="tab-button" type="button" data-view="tests">Tests</button>
           <button class="tab-button" type="button" data-view="quality">Quality</button>
@@ -152,6 +175,125 @@
                 </div>
               </div>
               <div id="scatterChart" class="chart tall"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" data-view-panel="services">
+          <div class="dashboard-grid">
+            <article class="panel full">
+              <div class="panel-header">
+                <div>
+                  <h3>Service Opinion Pulse</h3>
+                  <p>Each filled cell is a service opinion count for a template-month.</p>
+                </div>
+                <select id="serviceWindow" class="compact-select">
+                  <option value="all">All months</option>
+                  <option value="24">Last 24 months</option>
+                  <option value="12">Last 12 months</option>
+                </select>
+              </div>
+              <div id="servicePulse" class="service-pulse"></div>
+            </article>
+
+            <article class="panel full">
+              <div class="panel-header">
+                <div>
+                  <h3>Service Momentum</h3>
+                  <p>Coverage percentage-point change: recent six months vs prior six, excluding future-dated rows.</p>
+                </div>
+                <select id="serviceMomentumMetric" class="compact-select">
+                  <option value="coverage" selected>Coverage delta</option>
+                  <option value="meanWords">Mean words/opinion delta</option>
+                  <option value="medianWords">Median words/opinion delta</option>
+                  <option value="totalWords">Total word-count delta</option>
+                  <option value="opinions">Opinion-count delta</option>
+                </select>
+              </div>
+              <div id="serviceMomentumChart" class="chart xlarge"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <h3>Service Mix</h3>
+                  <p>Share of all service opinions in the current filter.</p>
+                </div>
+              </div>
+              <div id="serviceMixChart" class="chart"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <h3>Template-Service Concentration</h3>
+                  <p>Which services dominate each template.</p>
+                </div>
+              </div>
+              <div id="templateServiceChart" class="chart"></div>
+            </article>
+
+            <article class="panel full">
+              <div class="panel-header">
+                <div>
+                  <h3>Service Opinion Table</h3>
+                  <p>Counts, words, coverage, and recent momentum.</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table id="serviceTable"></table>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" data-view-panel="authors">
+          <div class="dashboard-grid">
+            <article class="panel full">
+              <div class="panel-header">
+                <div>
+                  <h3>Author / Service-Office Length Profile</h3>
+                  <p>Author values behave like service-office codes; use with template filters for fair comparison.</p>
+                </div>
+                <select id="authorMinDocs" class="compact-select">
+                  <option value="5">Min 5 docs</option>
+                  <option value="10" selected>Min 10 docs</option>
+                  <option value="20">Min 20 docs</option>
+                </select>
+              </div>
+              <div id="authorLengthChart" class="chart xlarge"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <h3>Shortest Author Groups</h3>
+                  <p>Lowest median text-before-opinions words.</p>
+                </div>
+              </div>
+              <div id="shortAuthorChart" class="chart"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <h3>Author Coverage</h3>
+                  <p>Missing author rows by template.</p>
+                </div>
+              </div>
+              <div id="authorCoverageChart" class="chart"></div>
+            </article>
+
+            <article class="panel full">
+              <div class="panel-header">
+                <div>
+                  <h3>Author Detail Table</h3>
+                  <p>Median words, pages, service sections, and template mix.</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table id="authorTable"></table>
+              </div>
             </article>
           </div>
         </section>
@@ -354,6 +496,6 @@
     </div>
 
     <div id="tooltip" class="tooltip" role="status" aria-live="polite"></div>
-    <script src="app.js"></script>
+    <script src="app.js?v=20260529-momentum-mean-median"></script>
   </body>
 </html>
