@@ -80,14 +80,16 @@ BO_SELECTED_COLUMNS = [
     *BO_SERVICE_COLUMN_MAP.keys(),
 ]
 BO_EXPANDED_OUTPUT_COLUMNS = [
-    BO_PRODUCT_NAME_COLUMN,
-    BO_SPECIAL_ACTIVITIES_COLUMN,
+    f"BO {BO_PRODUCT_NAME_COLUMN}",
+    f"BO {BO_SPECIAL_ACTIVITIES_COLUMN}",
     f"BO {BO_PIN_GNG_VALIDATION_DATE}",
     f"BO {BO_AFS_VALIDATION_DATE}",
     BO_OUTPUT_COLUMN,
     *(f"BO {column}" for column in BO_SERVICE_COLUMN_MAP),
 ]
 BO_RAW_EXPANDED_COLUMNS = [
+    f"BO {BO_PRODUCT_NAME_COLUMN}",
+    f"BO {BO_SPECIAL_ACTIVITIES_COLUMN}",
     f"BO {BO_PIN_GNG_VALIDATION_DATE}",
     f"BO {BO_AFS_VALIDATION_DATE}",
     BO_OUTPUT_COLUMN,
@@ -225,8 +227,24 @@ def build_power_query_formula() -> str:
             else [#"{BO_OUTPUT_COLUMN}"],
         type text
     ),
-    BOServicePJ = Table.AddColumn(
+    BOProductName = Table.AddColumn(
         TemplateCheckedBO,
+        "{BO_PRODUCT_NAME_COLUMN}",
+        each if List.Contains({{"AFS", "GNG"}}, (try Text.Upper(Text.Trim(Text.From([Template]))) otherwise ""))
+            then [#"BO {BO_PRODUCT_NAME_COLUMN}"]
+            else null,
+        type text
+    ),
+    BOSpecialActivitiesFlag = Table.AddColumn(
+        BOProductName,
+        "{BO_SPECIAL_ACTIVITIES_COLUMN}",
+        each if List.Contains({{"AFS", "GNG"}}, (try Text.Upper(Text.Trim(Text.From([Template]))) otherwise ""))
+            then [#"BO {BO_SPECIAL_ACTIVITIES_COLUMN}"]
+            else null,
+        type text
+    ),
+    BOServicePJ = Table.AddColumn(
+        BOSpecialActivitiesFlag,
         "{BO_PJ_OUTPUT_COLUMN}",
         each if List.Contains({{"AFS", "GNG"}}, (try Text.Upper(Text.Trim(Text.From([Template]))) otherwise ""))
             then [#"BO {BO_PJ_COLUMN}"]
@@ -302,6 +320,8 @@ def build_master_dataframe() -> pd.DataFrame:
     ]
 
     afs_gng_mask = template_type.isin(["AFS", "GNG"])
+    master.loc[~afs_gng_mask, [BO_PRODUCT_NAME_COLUMN, BO_SPECIAL_ACTIVITIES_COLUMN]] = pd.NA
+
     for source_column, output_column in BO_SERVICE_COLUMN_MAP.items():
         master[output_column] = pd.NA
         master.loc[afs_gng_mask, output_column] = master.loc[afs_gng_mask, source_column]

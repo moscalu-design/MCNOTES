@@ -61,7 +61,7 @@ let
         JoinedBO,
         "BO",
         {"Financing Product Name", "Operation Special Activities Flag", "PIN/GNG Validation Date", "Operation AFS Validation Date", "Operation Team OPS/GLO Main Division Short Name", "TEAM PJ", "TEAM RM", "TEAM JU", "Operation Team SG Main Division Short Name"},
-        {"Financing Product Name", "Operation Special Activities Flag", "BO PIN/GNG Validation Date", "BO Operation AFS Validation Date", "BO Operation Team OPS/GLO Main Division Short Name", "BO TEAM PJ", "BO TEAM RM", "BO TEAM JU", "BO Operation Team SG Main Division Short Name"}
+        {"BO Financing Product Name", "BO Operation Special Activities Flag", "BO PIN/GNG Validation Date", "BO Operation AFS Validation Date", "BO Operation Team OPS/GLO Main Division Short Name", "BO TEAM PJ", "BO TEAM RM", "BO TEAM JU", "BO Operation Team SG Main Division Short Name"}
     ),
     BOValidationDate = Table.AddColumn(
         ExpandedBO,
@@ -87,8 +87,24 @@ let
             else [#"BO Operation Team OPS/GLO Main Division Short Name"],
         type text
     ),
-    BOServicePJ = Table.AddColumn(
+    BOProductName = Table.AddColumn(
         TemplateCheckedBO,
+        "Financing Product Name",
+        each if List.Contains({"AFS", "GNG"}, (try Text.Upper(Text.Trim(Text.From([Template]))) otherwise ""))
+            then [#"BO Financing Product Name"]
+            else null,
+        type text
+    ),
+    BOSpecialActivitiesFlag = Table.AddColumn(
+        BOProductName,
+        "Operation Special Activities Flag",
+        each if List.Contains({"AFS", "GNG"}, (try Text.Upper(Text.Trim(Text.From([Template]))) otherwise ""))
+            then [#"BO Operation Special Activities Flag"]
+            else null,
+        type text
+    ),
+    BOServiceTeamPJ = Table.AddColumn(
+        BOSpecialActivitiesFlag,
         "BO PJ",
         each if List.Contains({"AFS", "GNG"}, (try Text.Upper(Text.Trim(Text.From([Template]))) otherwise ""))
             then [#"BO TEAM PJ"]
@@ -96,7 +112,7 @@ let
         type text
     ),
     BOServiceRM = Table.AddColumn(
-        BOServicePJ,
+        BOServiceTeamPJ,
         "BO RM",
         each if List.Contains({"AFS", "GNG"}, (try Text.Upper(Text.Trim(Text.From([Template]))) otherwise ""))
             then [#"BO TEAM RM"]
@@ -121,7 +137,7 @@ let
     ),
     RemovedRawBO = Table.RemoveColumns(
         BOServiceECON,
-        {"BO PIN/GNG Validation Date", "BO Operation AFS Validation Date", "BO Operation Team OPS/GLO Main Division Short Name", "BO TEAM PJ", "BO TEAM RM", "BO TEAM JU", "BO Operation Team SG Main Division Short Name"}
+        {"BO Financing Product Name", "BO Operation Special Activities Flag", "BO PIN/GNG Validation Date", "BO Operation AFS Validation Date", "BO Operation Team OPS/GLO Main Division Short Name", "BO TEAM PJ", "BO TEAM RM", "BO TEAM JU", "BO Operation Team SG Main Division Short Name"}
     ),
     MasterTable = Table.RenameColumns(
         RemovedRawBO,
