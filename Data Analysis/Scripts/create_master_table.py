@@ -48,10 +48,79 @@ MC_COLUMNS_B_TO_AC = [
 ]
 
 BO_COLUMN_AB = "Operation Team OPS/GLO Main Division Short Name"
-BO_OUTPUT_COLUMN = f"BO {BO_COLUMN_AB}"
+BO_OUTPUT_COLUMN = "BO Author (OPS/GLO)"
 BO_PIN_GNG_VALIDATION_DATE = "PIN/GNG Validation Date"
 BO_AFS_VALIDATION_DATE = "Operation AFS Validation Date"
 BO_VALIDATION_OUTPUT_COLUMN = "BO Validation Date"
+BO_PJ_COLUMN = "TEAM PJ"
+BO_RM_COLUMN = "TEAM RM"
+BO_JU_COLUMN = "TEAM JU"
+BO_ECON_COLUMN = "Operation Team SG Main Division Short Name"
+BO_PJ_OUTPUT_COLUMN = "BO PJ"
+BO_RM_OUTPUT_COLUMN = "BO RM"
+BO_JU_OUTPUT_COLUMN = "BO JU"
+BO_ECON_OUTPUT_COLUMN = "BO ECON"
+
+BO_SERVICE_COLUMN_MAP = {
+    BO_PJ_COLUMN: BO_PJ_OUTPUT_COLUMN,
+    BO_RM_COLUMN: BO_RM_OUTPUT_COLUMN,
+    BO_JU_COLUMN: BO_JU_OUTPUT_COLUMN,
+    BO_ECON_COLUMN: BO_ECON_OUTPUT_COLUMN,
+}
+
+BO_SELECTED_COLUMNS = [
+    "Operation",
+    BO_PIN_GNG_VALIDATION_DATE,
+    BO_AFS_VALIDATION_DATE,
+    BO_COLUMN_AB,
+    *BO_SERVICE_COLUMN_MAP.keys(),
+]
+BO_EXPANDED_OUTPUT_COLUMNS = [
+    f"BO {BO_PIN_GNG_VALIDATION_DATE}",
+    f"BO {BO_AFS_VALIDATION_DATE}",
+    BO_OUTPUT_COLUMN,
+    *(f"BO {column}" for column in BO_SERVICE_COLUMN_MAP),
+]
+BO_RAW_EXPANDED_COLUMNS = [
+    f"BO {BO_PIN_GNG_VALIDATION_DATE}",
+    f"BO {BO_AFS_VALIDATION_DATE}",
+    BO_OUTPUT_COLUMN,
+    *(f"BO {column}" for column in BO_SERVICE_COLUMN_MAP),
+]
+
+MASTER_COLUMN_ORDER = [
+    "Source",
+    "Template",
+    "Extraction",
+    "MC_Note_Type",
+    "File Name",
+    "Operation Number",
+    "Validation Date",
+    "Author",
+    BO_VALIDATION_OUTPUT_COLUMN,
+    BO_OUTPUT_COLUMN,
+    "Document Page Count",
+    "Page count before opinion",
+    "Annex Page Count",
+    "Text Before Opinions",
+    "OPS",
+    "GLO",
+    "PJ",
+    "RM",
+    "OCCO",
+    "JU",
+    "ECON",
+    "CFC",
+    "EIF",
+    "FI",
+    "IG",
+    "PMM",
+    "SG",
+    "GIS",
+    "HR",
+    "OTHER",
+    *BO_SERVICE_COLUMN_MAP.values(),
+]
 
 
 def m_string(value: Path | str) -> str:
@@ -102,7 +171,7 @@ def build_power_query_formula() -> str:
     ),
     BOSelectedColumns = Table.SelectColumns(
         BOPromotedHeaders,
-        {{"Operation", "{BO_PIN_GNG_VALIDATION_DATE}", "{BO_AFS_VALIDATION_DATE}", "{BO_COLUMN_AB}"}},
+        {m_list(BO_SELECTED_COLUMNS)},
         MissingField.UseNull
     ),
     BOOperationTyped = Table.TransformColumns(
@@ -121,18 +190,22 @@ def build_power_query_formula() -> str:
     ExpandedBO = Table.ExpandTableColumn(
         JoinedBO,
         "BO",
-        {{"{BO_PIN_GNG_VALIDATION_DATE}", "{BO_AFS_VALIDATION_DATE}", "{BO_COLUMN_AB}"}},
-        {{"BO {BO_PIN_GNG_VALIDATION_DATE}", "BO {BO_AFS_VALIDATION_DATE}", "{BO_OUTPUT_COLUMN}"}}
+        {m_list(BO_SELECTED_COLUMNS[1:])},
+        {m_list(BO_EXPANDED_OUTPUT_COLUMNS)}
     ),
     BOValidationDate = Table.AddColumn(
         ExpandedBO,
         "{BO_VALIDATION_OUTPUT_COLUMN}",
         each
-            let TemplateType = try Text.Upper(Text.Trim(Text.From([Template]))) otherwise ""
+            let
+                TemplateType = try Text.Upper(Text.Trim(Text.From([Template]))) otherwise "",
+                MCValidationDate = try Date.From([#"Validation Date"]) otherwise null,
+                BOAFSValidationDate = try Date.From([#"BO {BO_AFS_VALIDATION_DATE}"]) otherwise null,
+                BOPINGNGValidationDate = try Date.From([#"BO {BO_PIN_GNG_VALIDATION_DATE}"]) otherwise null
             in
-                if TemplateType = "OTHER" then null
-                else if TemplateType = "AFS" then [#"BO {BO_AFS_VALIDATION_DATE}"]
-                else if TemplateType = "GNG" or TemplateType = "PIN" then [#"BO {BO_PIN_GNG_VALIDATION_DATE}"]
+                if TemplateType = "OTHER" then MCValidationDate
+                else if TemplateType = "AFS" then BOAFSValidationDate
+                else if TemplateType = "GNG" or TemplateType = "PIN" then BOPINGNGValidationDate
                 else null,
         type date
     ),
@@ -144,16 +217,53 @@ def build_power_query_formula() -> str:
             else [#"{BO_OUTPUT_COLUMN}"],
         type text
     ),
-    RemovedRawBO = Table.RemoveColumns(
+    BOServicePJ = Table.AddColumn(
         TemplateCheckedBO,
-        {{"BO {BO_PIN_GNG_VALIDATION_DATE}", "BO {BO_AFS_VALIDATION_DATE}", "{BO_OUTPUT_COLUMN}"}}
+        "{BO_PJ_OUTPUT_COLUMN}",
+        each if List.Contains({{"AFS", "GNG"}}, (try Text.Upper(Text.Trim(Text.From([Template]))) otherwise ""))
+            then [#"BO {BO_PJ_COLUMN}"]
+            else null,
+        type text
+    ),
+    BOServiceRM = Table.AddColumn(
+        BOServicePJ,
+        "{BO_RM_OUTPUT_COLUMN}",
+        each if List.Contains({{"AFS", "GNG"}}, (try Text.Upper(Text.Trim(Text.From([Template]))) otherwise ""))
+            then [#"BO {BO_RM_COLUMN}"]
+            else null,
+        type text
+    ),
+    BOServiceJU = Table.AddColumn(
+        BOServiceRM,
+        "{BO_JU_OUTPUT_COLUMN}",
+        each if List.Contains({{"AFS", "GNG"}}, (try Text.Upper(Text.Trim(Text.From([Template]))) otherwise ""))
+            then [#"BO {BO_JU_COLUMN}"]
+            else null,
+        type text
+    ),
+    BOServiceECON = Table.AddColumn(
+        BOServiceJU,
+        "{BO_ECON_OUTPUT_COLUMN}",
+        each if List.Contains({{"AFS", "GNG"}}, (try Text.Upper(Text.Trim(Text.From([Template]))) otherwise ""))
+            then [#"BO {BO_ECON_COLUMN}"]
+            else null,
+        type text
+    ),
+    RemovedRawBO = Table.RemoveColumns(
+        BOServiceECON,
+        {m_list(BO_RAW_EXPANDED_COLUMNS)}
     ),
     MasterTable = Table.RenameColumns(
         RemovedRawBO,
         {{{{"{BO_OUTPUT_COLUMN} Template Checked", "{BO_OUTPUT_COLUMN}"}}}}
+    ),
+    OrderedMasterTable = Table.ReorderColumns(
+        MasterTable,
+        {m_list(MASTER_COLUMN_ORDER)},
+        MissingField.Ignore
     )
 in
-    MasterTable"""
+    OrderedMasterTable"""
 
 
 def build_master_dataframe() -> pd.DataFrame:
@@ -164,7 +274,7 @@ def build_master_dataframe() -> pd.DataFrame:
 
     bo = pd.read_excel(BO_DB, sheet_name="BO Data", header=1)
     bo = bo.dropna(how="all")
-    bo = bo[["Operation", BO_PIN_GNG_VALIDATION_DATE, BO_AFS_VALIDATION_DATE, BO_COLUMN_AB]].copy()
+    bo = bo[BO_SELECTED_COLUMNS].copy()
     bo["Operation"] = pd.to_numeric(bo["Operation"], errors="coerce").astype("Int64")
     bo = bo.drop_duplicates(subset=["Operation"])
 
@@ -179,10 +289,22 @@ def build_master_dataframe() -> pd.DataFrame:
     master.loc[template_type.isin(["GNG", "PIN"]), BO_VALIDATION_OUTPUT_COLUMN] = master.loc[
         template_type.isin(["GNG", "PIN"]), BO_PIN_GNG_VALIDATION_DATE
     ]
-    master = master.drop(columns=[BO_PIN_GNG_VALIDATION_DATE, BO_AFS_VALIDATION_DATE])
+    master.loc[template_type.eq("OTHER"), BO_VALIDATION_OUTPUT_COLUMN] = master.loc[
+        template_type.eq("OTHER"), "Validation Date"
+    ]
+
+    afs_gng_mask = template_type.isin(["AFS", "GNG"])
+    for source_column, output_column in BO_SERVICE_COLUMN_MAP.items():
+        master[output_column] = pd.NA
+        master.loc[afs_gng_mask, output_column] = master.loc[afs_gng_mask, source_column]
+
+    master = master.drop(
+        columns=[BO_PIN_GNG_VALIDATION_DATE, BO_AFS_VALIDATION_DATE, *BO_SERVICE_COLUMN_MAP.keys()]
+    )
 
     other_mask = template_type.eq("OTHER")
     master.loc[other_mask, BO_OUTPUT_COLUMN] = pd.NA
+    master = master[[column for column in MASTER_COLUMN_ORDER if column in master.columns]]
     return master
 
 
@@ -235,10 +357,11 @@ def write_workbook(master: pd.DataFrame) -> None:
     readme["A1"] = "Master Table"
     readme["A1"].font = Font(bold=True, size=14)
     readme["A3"] = "Loaded table: MC_Note_Datebase.xlsx / Database / columns B:AC."
-    readme["A4"] = f"Added BO column AB: {BO_COLUMN_AB}."
+    readme["A4"] = f"Added BO column AB as: {BO_OUTPUT_COLUMN}."
     readme["A5"] = "Join key: MC Operation Number = BO Operation."
-    readme["A6"] = "Power Query M code is included in the 'Power Query M' sheet and saved beside this workbook."
-    readme["A7"] = "Note: Excel COM was unstable in this environment when embedding the query connection, so the table is preloaded from the same logic."
+    readme["A6"] = "For AFS and GNG only, added BO PJ/RM/JU/ECON service fields at the end of the table; BO ECON uses the BO SG division field."
+    readme["A7"] = "Power Query M code is included in the 'Power Query M' sheet and saved beside this workbook."
+    readme["A8"] = "Note: Excel COM was unstable in this environment when embedding the query connection, so the table is preloaded from the same logic."
     readme.column_dimensions["A"].width = 120
 
     query_sheet = workbook.create_sheet("Power Query M")

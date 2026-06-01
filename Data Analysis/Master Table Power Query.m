@@ -41,7 +41,7 @@ let
     ),
     BOSelectedColumns = Table.SelectColumns(
         BOPromotedHeaders,
-        {"Operation", "PIN/GNG Validation Date", "Operation AFS Validation Date", "Operation Team OPS/GLO Main Division Short Name"},
+        {"Operation", "PIN/GNG Validation Date", "Operation AFS Validation Date", "Operation Team OPS/GLO Main Division Short Name", "TEAM PJ", "TEAM RM", "TEAM JU", "Operation Team SG Main Division Short Name"},
         MissingField.UseNull
     ),
     BOOperationTyped = Table.TransformColumns(
@@ -60,36 +60,77 @@ let
     ExpandedBO = Table.ExpandTableColumn(
         JoinedBO,
         "BO",
-        {"PIN/GNG Validation Date", "Operation AFS Validation Date", "Operation Team OPS/GLO Main Division Short Name"},
-        {"BO PIN/GNG Validation Date", "BO Operation AFS Validation Date", "BO Operation Team OPS/GLO Main Division Short Name"}
+        {"PIN/GNG Validation Date", "Operation AFS Validation Date", "Operation Team OPS/GLO Main Division Short Name", "TEAM PJ", "TEAM RM", "TEAM JU", "Operation Team SG Main Division Short Name"},
+        {"BO PIN/GNG Validation Date", "BO Operation AFS Validation Date", "BO Operation Team OPS/GLO Main Division Short Name", "BO TEAM PJ", "BO TEAM RM", "BO TEAM JU", "BO Operation Team SG Main Division Short Name"}
     ),
     BOValidationDate = Table.AddColumn(
         ExpandedBO,
         "BO Validation Date",
         each
-            let TemplateType = try Text.Upper(Text.Trim(Text.From([Template]))) otherwise ""
+            let
+                TemplateType = try Text.Upper(Text.Trim(Text.From([Template]))) otherwise "",
+                MCValidationDate = try Date.From([#"Validation Date"]) otherwise null,
+                BOAFSValidationDate = try Date.From([#"BO Operation AFS Validation Date"]) otherwise null,
+                BOPINGNGValidationDate = try Date.From([#"BO PIN/GNG Validation Date"]) otherwise null
             in
-                if TemplateType = "OTHER" then null
-                else if TemplateType = "AFS" then [#"BO Operation AFS Validation Date"]
-                else if TemplateType = "GNG" or TemplateType = "PIN" then [#"BO PIN/GNG Validation Date"]
+                if TemplateType = "OTHER" then MCValidationDate
+                else if TemplateType = "AFS" then BOAFSValidationDate
+                else if TemplateType = "GNG" or TemplateType = "PIN" then BOPINGNGValidationDate
                 else null,
         type date
     ),
     TemplateCheckedBO = Table.AddColumn(
         BOValidationDate,
-        "BO Operation Team OPS/GLO Main Division Short Name Template Checked",
+        "BO Author (OPS/GLO) Template Checked",
         each if (try Text.Upper(Text.Trim(Text.From([Template]))) otherwise "") = "OTHER"
             then null
             else [#"BO Operation Team OPS/GLO Main Division Short Name"],
         type text
     ),
-    RemovedRawBO = Table.RemoveColumns(
+    BOServicePJ = Table.AddColumn(
         TemplateCheckedBO,
-        {"BO PIN/GNG Validation Date", "BO Operation AFS Validation Date", "BO Operation Team OPS/GLO Main Division Short Name"}
+        "BO PJ",
+        each if List.Contains({"AFS", "GNG"}, (try Text.Upper(Text.Trim(Text.From([Template]))) otherwise ""))
+            then [#"BO TEAM PJ"]
+            else null,
+        type text
+    ),
+    BOServiceRM = Table.AddColumn(
+        BOServicePJ,
+        "BO RM",
+        each if List.Contains({"AFS", "GNG"}, (try Text.Upper(Text.Trim(Text.From([Template]))) otherwise ""))
+            then [#"BO TEAM RM"]
+            else null,
+        type text
+    ),
+    BOServiceJU = Table.AddColumn(
+        BOServiceRM,
+        "BO JU",
+        each if List.Contains({"AFS", "GNG"}, (try Text.Upper(Text.Trim(Text.From([Template]))) otherwise ""))
+            then [#"BO TEAM JU"]
+            else null,
+        type text
+    ),
+    BOServiceECON = Table.AddColumn(
+        BOServiceJU,
+        "BO ECON",
+        each if List.Contains({"AFS", "GNG"}, (try Text.Upper(Text.Trim(Text.From([Template]))) otherwise ""))
+            then [#"BO Operation Team SG Main Division Short Name"]
+            else null,
+        type text
+    ),
+    RemovedRawBO = Table.RemoveColumns(
+        BOServiceECON,
+        {"BO PIN/GNG Validation Date", "BO Operation AFS Validation Date", "BO Operation Team OPS/GLO Main Division Short Name", "BO TEAM PJ", "BO TEAM RM", "BO TEAM JU", "BO Operation Team SG Main Division Short Name"}
     ),
     MasterTable = Table.RenameColumns(
         RemovedRawBO,
-        {{"BO Operation Team OPS/GLO Main Division Short Name Template Checked", "BO Operation Team OPS/GLO Main Division Short Name"}}
+        {{"BO Author (OPS/GLO) Template Checked", "BO Author (OPS/GLO)"}}
+    ),
+    OrderedMasterTable = Table.ReorderColumns(
+        MasterTable,
+        {"Source", "Template", "Extraction", "MC_Note_Type", "File Name", "Operation Number", "Validation Date", "Author", "BO Validation Date", "BO Author (OPS/GLO)", "Document Page Count", "Page count before opinion", "Annex Page Count", "Text Before Opinions", "OPS", "GLO", "PJ", "RM", "OCCO", "JU", "ECON", "CFC", "EIF", "FI", "IG", "PMM", "SG", "GIS", "HR", "OTHER", "BO PJ", "BO RM", "BO JU", "BO ECON"},
+        MissingField.Ignore
     )
 in
-    MasterTable
+    OrderedMasterTable
