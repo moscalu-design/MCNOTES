@@ -52,6 +52,8 @@ BO_OUTPUT_COLUMN = "BO Author (OPS/GLO)"
 BO_PIN_GNG_VALIDATION_DATE = "PIN/GNG Validation Date"
 BO_AFS_VALIDATION_DATE = "Operation AFS Validation Date"
 BO_VALIDATION_OUTPUT_COLUMN = "BO Validation Date"
+BO_PRODUCT_NAME_COLUMN = "Financing Product Name"
+BO_SPECIAL_ACTIVITIES_COLUMN = "Operation Special Activities Flag"
 BO_PJ_COLUMN = "TEAM PJ"
 BO_RM_COLUMN = "TEAM RM"
 BO_JU_COLUMN = "TEAM JU"
@@ -70,12 +72,16 @@ BO_SERVICE_COLUMN_MAP = {
 
 BO_SELECTED_COLUMNS = [
     "Operation",
+    BO_PRODUCT_NAME_COLUMN,
+    BO_SPECIAL_ACTIVITIES_COLUMN,
     BO_PIN_GNG_VALIDATION_DATE,
     BO_AFS_VALIDATION_DATE,
     BO_COLUMN_AB,
     *BO_SERVICE_COLUMN_MAP.keys(),
 ]
 BO_EXPANDED_OUTPUT_COLUMNS = [
+    BO_PRODUCT_NAME_COLUMN,
+    BO_SPECIAL_ACTIVITIES_COLUMN,
     f"BO {BO_PIN_GNG_VALIDATION_DATE}",
     f"BO {BO_AFS_VALIDATION_DATE}",
     BO_OUTPUT_COLUMN,
@@ -95,6 +101,8 @@ MASTER_COLUMN_ORDER = [
     "MC_Note_Type",
     "File Name",
     "Operation Number",
+    BO_PRODUCT_NAME_COLUMN,
+    BO_SPECIAL_ACTIVITIES_COLUMN,
     "Validation Date",
     "Author",
     BO_VALIDATION_OUTPUT_COLUMN,
@@ -359,9 +367,10 @@ def write_workbook(master: pd.DataFrame) -> None:
     readme["A3"] = "Loaded table: MC_Note_Datebase.xlsx / Database / columns B:AC."
     readme["A4"] = f"Added BO column AB as: {BO_OUTPUT_COLUMN}."
     readme["A5"] = "Join key: MC Operation Number = BO Operation."
-    readme["A6"] = "For AFS and GNG only, added BO PJ/RM/JU/ECON service fields at the end of the table; BO ECON uses the BO SG division field."
-    readme["A7"] = "Power Query M code is included in the 'Power Query M' sheet and saved beside this workbook."
-    readme["A8"] = "Note: Excel COM was unstable in this environment when embedding the query connection, so the table is preloaded from the same logic."
+    readme["A6"] = "Added BO Financing Product Name and Operation Special Activities Flag next to Operation Number."
+    readme["A7"] = "For AFS and GNG only, added BO PJ/RM/JU/ECON service fields at the end of the table; BO ECON uses the BO SG division field."
+    readme["A8"] = "Power Query M code is included in the 'Power Query M' sheet and saved beside this workbook."
+    readme["A9"] = "Note: Excel COM was unstable in this environment when embedding the query connection, so the table is preloaded from the same logic."
     readme.column_dimensions["A"].width = 120
 
     query_sheet = workbook.create_sheet("Power Query M")

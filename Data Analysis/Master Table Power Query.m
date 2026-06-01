@@ -41,7 +41,7 @@ let
     ),
     BOSelectedColumns = Table.SelectColumns(
         BOPromotedHeaders,
-        {"Operation", "PIN/GNG Validation Date", "Operation AFS Validation Date", "Operation Team OPS/GLO Main Division Short Name", "TEAM PJ", "TEAM RM", "TEAM JU", "Operation Team SG Main Division Short Name"},
+        {"Operation", "Financing Product Name", "Operation Special Activities Flag", "PIN/GNG Validation Date", "Operation AFS Validation Date", "Operation Team OPS/GLO Main Division Short Name", "TEAM PJ", "TEAM RM", "TEAM JU", "Operation Team SG Main Division Short Name"},
         MissingField.UseNull
     ),
     BOOperationTyped = Table.TransformColumns(
@@ -60,8 +60,8 @@ let
     ExpandedBO = Table.ExpandTableColumn(
         JoinedBO,
         "BO",
-        {"PIN/GNG Validation Date", "Operation AFS Validation Date", "Operation Team OPS/GLO Main Division Short Name", "TEAM PJ", "TEAM RM", "TEAM JU", "Operation Team SG Main Division Short Name"},
-        {"BO PIN/GNG Validation Date", "BO Operation AFS Validation Date", "BO Operation Team OPS/GLO Main Division Short Name", "BO TEAM PJ", "BO TEAM RM", "BO TEAM JU", "BO Operation Team SG Main Division Short Name"}
+        {"Financing Product Name", "Operation Special Activities Flag", "PIN/GNG Validation Date", "Operation AFS Validation Date", "Operation Team OPS/GLO Main Division Short Name", "TEAM PJ", "TEAM RM", "TEAM JU", "Operation Team SG Main Division Short Name"},
+        {"Financing Product Name", "Operation Special Activities Flag", "BO PIN/GNG Validation Date", "BO Operation AFS Validation Date", "BO Operation Team OPS/GLO Main Division Short Name", "BO TEAM PJ", "BO TEAM RM", "BO TEAM JU", "BO Operation Team SG Main Division Short Name"}
     ),
     BOValidationDate = Table.AddColumn(
         ExpandedBO,
@@ -129,7 +129,7 @@ let
     ),
     OrderedMasterTable = Table.ReorderColumns(
         MasterTable,
-        {"Source", "Template", "Extraction", "MC_Note_Type", "File Name", "Operation Number", "Validation Date", "Author", "BO Validation Date", "BO Author (OPS/GLO)", "Document Page Count", "Page count before opinion", "Annex Page Count", "Text Before Opinions", "OPS", "GLO", "PJ", "RM", "OCCO", "JU", "ECON", "CFC", "EIF", "FI", "IG", "PMM", "SG", "GIS", "HR", "OTHER", "BO PJ", "BO RM", "BO JU", "BO ECON"},
+        {"Source", "Template", "Extraction", "MC_Note_Type", "File Name", "Operation Number", "Financing Product Name", "Operation Special Activities Flag", "Validation Date", "Author", "BO Validation Date", "BO Author (OPS/GLO)", "Document Page Count", "Page count before opinion", "Annex Page Count", "Text Before Opinions", "OPS", "GLO", "PJ", "RM", "OCCO", "JU", "ECON", "CFC", "EIF", "FI", "IG", "PMM", "SG", "GIS", "HR", "OTHER", "BO PJ", "BO RM", "BO JU", "BO ECON"},
         MissingField.Ignore
     )
 in
