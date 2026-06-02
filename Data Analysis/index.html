@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>MC Notes Data Observatory</title>
-    <link rel="stylesheet" href="styles.css?v=20260529-deep">
+    <link rel="stylesheet" href="styles.css?v=20260602-pre2023-toggle-1">
   </head>
   <body>
     <div class="app-shell">
@@ -27,8 +27,23 @@
         </div>
 
         <div class="filter-group">
+          <label class="filter-title" for="opinionThresholdInput">Opinion Word Floor</label>
+          <div class="threshold-row">
+            <input id="opinionThresholdInput" type="number" min="0" step="1" value="0">
+            <button id="applyOpinionThreshold" class="ghost-button" type="button">Apply</button>
+            <button id="resetOpinionThreshold" class="icon-button" type="button" title="Include all opinions">x</button>
+          </div>
+          <p id="opinionThresholdStatus" class="filter-note">Including all service opinions.</p>
+        </div>
+
+        <div class="filter-group">
           <div class="filter-title">Template</div>
           <div id="templateFilters" class="chip-grid" aria-label="Template filters"></div>
+        </div>
+
+        <div class="filter-group">
+          <div class="filter-title">MC Note Type</div>
+          <div id="mcNoteTypeFilters" class="chip-grid" aria-label="MC note type filters"></div>
         </div>
 
         <div class="filter-group">
@@ -42,52 +57,66 @@
         </div>
 
         <div class="filter-group">
-          <label class="filter-title" for="gedFilter">GED Match</label>
-          <select id="gedFilter"></select>
-        </div>
-
-        <div class="filter-group two-col">
-          <label>
-            <span class="filter-title">From</span>
-            <input id="dateFrom" type="date">
-          </label>
-          <label>
-            <span class="filter-title">To</span>
-            <input id="dateTo" type="date">
-          </label>
-        </div>
-
-        <div class="filter-group">
-          <label class="filter-title" for="searchInput">Search</label>
-          <input id="searchInput" type="search" placeholder="File, operation, type">
-        </div>
-
-        <div class="filter-group">
           <label class="check-row">
-            <input id="hideFutureDates" type="checkbox">
-            <span>Hide future validation dates</span>
-          </label>
-          <label class="check-row">
-            <input id="onlyQualityIssues" type="checkbox">
-            <span>Only data-quality flags</span>
+            <input id="excludePre2023Validation" type="checkbox">
+            <span>Hide BO dates before 01/01/2023</span>
           </label>
         </div>
 
-        <div class="sidebar-actions">
-          <button id="resetFilters" class="ghost-button" type="button">Reset</button>
-          <button id="downloadFiltered" class="primary-button" type="button">Export CSV</button>
-        </div>
       </aside>
 
       <main class="main-panel">
         <header class="report-header">
           <div class="report-title-block">
-            <p class="eyebrow">Database tab analysis</p>
+            <p class="eyebrow">Master_Table_Q analysis</p>
             <h2>MC Notes Report</h2>
+          </div>
+          <div class="eleven-signal" aria-label="Eleven-style telekinetic dashboard signal" onclick="window.triggerDogRain && window.triggerDogRain()">
+            <img
+              id="elevenFace"
+              class="eleven-face"
+              src="https://upload.wikimedia.org/wikipedia/commons/thumb/9/9d/Millie_Bobby_Brown_2018.jpg/250px-Millie_Bobby_Brown_2018.jpg"
+              alt="Millie Bobby Brown portrait, photo by Gage Skidmore, CC BY-SA 2.0"
+              title="Photo: Gage Skidmore, CC BY-SA 2.0, via Wikimedia Commons"
+              role="button"
+              tabindex="0"
+              aria-label="Trigger puppy rain"
+              loading="lazy"
+              referrerpolicy="no-referrer"
+            >
+            <svg viewBox="0 0 230 72" role="img">
+              <title>Eleven-style telekinetic signal</title>
+              <defs>
+                <linearGradient id="elevenGlow" x1="0" x2="1" y1="0" y2="1">
+                  <stop offset="0" stop-color="#fff3a3"></stop>
+                  <stop offset="0.55" stop-color="#ffcc00"></stop>
+                  <stop offset="1" stop-color="#2a9d8f"></stop>
+                </linearGradient>
+              </defs>
+              <path class="eleven-grid" d="M10 58 H218 M10 44 H218 M10 30 H218 M10 16 H218"></path>
+              <path class="eleven-line" d="M16 52 C38 20, 52 58, 70 32 S112 8, 134 38 S174 58, 196 22 L214 30"></path>
+              <g class="eleven-bars">
+                <rect x="27" y="39" width="10" height="18" rx="3"></rect>
+                <rect x="48" y="27" width="10" height="30" rx="3"></rect>
+                <rect x="69" y="34" width="10" height="23" rx="3"></rect>
+                <rect x="90" y="18" width="10" height="39" rx="3"></rect>
+                <rect x="111" y="30" width="10" height="27" rx="3"></rect>
+              </g>
+              <g class="eleven-figure">
+                <circle cx="166" cy="24" r="8"></circle>
+                <path d="M166 33 L158 50 L176 50 Z"></path>
+                <path d="M155 38 C143 31, 134 26, 124 24"></path>
+                <path d="M177 38 C190 32, 197 26, 207 22"></path>
+                <circle class="floating-dot dot-a" cx="124" cy="24" r="4"></circle>
+                <circle class="floating-dot dot-b" cx="207" cy="22" r="4"></circle>
+              </g>
+              <text x="151" y="66" class="eleven-label">011</text>
+            </svg>
           </div>
           <div class="report-toolbar" aria-label="Report toolbar">
             <button id="focusServices" class="toolbar-button" type="button">Service Pulse</button>
             <button id="focusTests" class="toolbar-button" type="button">Data Tests</button>
+            <button id="refreshData" class="toolbar-button" type="button">Refresh Data</button>
             <button id="clearAllFilters" class="toolbar-button primary-toolbar" type="button">Clear Filters</button>
           </div>
         </header>
@@ -98,7 +127,7 @@
             <strong id="recordStatus">Loading data</strong>
           </div>
           <div class="status-tile">
-            <span>Date Span</span>
+            <span>BO Date Span</span>
             <strong id="dateStatus"></strong>
           </div>
           <div class="status-tile wide-status">
@@ -110,9 +139,9 @@
         <section id="kpiGrid" class="kpi-grid" aria-label="Key metrics"></section>
 
         <nav class="tabbar" aria-label="Dashboard views">
-          <button class="tab-button active" type="button" data-view="overview">Overview</button>
-          <button class="tab-button" type="button" data-view="time">Time Series</button>
-          <button class="tab-button" type="button" data-view="services">Services</button>
+          <button class="tab-button active" type="button" data-view="services">Services</button>
+          <button class="tab-button" type="button" data-view="pages">Page Counts</button>
+          <button class="tab-button" type="button" data-view="noteTypes">MC Note Types</button>
           <button class="tab-button" type="button" data-view="authors">Authors</button>
           <button class="tab-button" type="button" data-view="batches">Batch Folders</button>
           <button class="tab-button" type="button" data-view="tests">Tests</button>
@@ -120,117 +149,30 @@
           <button class="tab-button" type="button" data-view="records">Records</button>
         </nav>
 
-        <section class="view active" data-view-panel="overview">
+        <section class="view active" data-view-panel="services">
           <div class="dashboard-grid">
-            <article class="panel wide">
-              <div class="panel-header">
-                <div>
-                  <h3>Word Count Distribution</h3>
-                  <p>Median, interquartile range, and outer spread by template.</p>
-                </div>
-                <select id="distributionMetric" class="compact-select">
-                  <option value="Text Before Opinions">Words</option>
-                  <option value="Document Page Count">Document Pages</option>
-                  <option value="Words Per Document Page">Words/Page</option>
-                </select>
-              </div>
-              <div id="boxChart" class="chart tall"></div>
-            </article>
-
-            <article class="panel">
-              <div class="panel-header">
-                <div>
-                  <h3>Template Mix</h3>
-                  <p>Document volume and share.</p>
-                </div>
-              </div>
-              <div id="templateDonut" class="chart"></div>
-            </article>
-
-            <article class="panel">
-              <div class="panel-header">
-                <div>
-                  <h3>Manual Rate</h3>
-                  <p>Correction load by template.</p>
-                </div>
-              </div>
-              <div id="manualRateChart" class="chart"></div>
-            </article>
-
-            <article class="panel wide">
-              <div class="panel-header">
-                <div>
-                  <h3>Department Word Share</h3>
-                  <p>Template-aware matrix: departments are shown by template to avoid false reads.</p>
-                </div>
-              </div>
-              <div id="departmentChart" class="chart tall"></div>
-            </article>
-
-            <article class="panel wide">
-              <div class="panel-header">
-                <div>
-                  <h3>Pages vs Words</h3>
-                  <p>Each point is a document. Select a template in the legend by filtering left.</p>
-                </div>
-              </div>
-              <div id="scatterChart" class="chart tall"></div>
-            </article>
-          </div>
-        </section>
-
-        <section class="view" data-view-panel="services">
-          <div class="dashboard-grid">
-            <article class="panel full">
-              <div class="panel-header">
-                <div>
-                  <h3>Service Opinion Pulse</h3>
-                  <p>Each filled cell is a service opinion count for a template-month.</p>
-                </div>
-                <select id="serviceWindow" class="compact-select">
-                  <option value="all">All months</option>
-                  <option value="24">Last 24 months</option>
-                  <option value="12">Last 12 months</option>
-                </select>
-              </div>
-              <div id="servicePulse" class="service-pulse"></div>
-            </article>
-
             <article class="panel full">
               <div class="panel-header">
                 <div>
                   <h3>Service Momentum</h3>
-                  <p>Coverage percentage-point change: recent six months vs prior six, excluding future-dated rows.</p>
+                  <p>Mean or median opinion-length change: recent six months vs prior six, by template.</p>
                 </div>
                 <select id="serviceMomentumMetric" class="compact-select">
-                  <option value="coverage" selected>Coverage delta</option>
-                  <option value="meanWords">Mean words/opinion delta</option>
+                  <option value="meanWords" selected>Mean words/opinion delta</option>
                   <option value="medianWords">Median words/opinion delta</option>
-                  <option value="totalWords">Total word-count delta</option>
-                  <option value="opinions">Opinion-count delta</option>
                 </select>
               </div>
-              <div id="serviceMomentumChart" class="chart xlarge"></div>
+              <div id="serviceMomentumChart" class="momentum-template-grid"></div>
             </article>
 
-            <article class="panel">
+            <article class="panel full">
               <div class="panel-header">
                 <div>
-                  <h3>Service Mix</h3>
-                  <p>Share of all service opinions in the current filter.</p>
+                  <h3>Service Volume and Length</h3>
+                  <p>Opinion volume by service with mean and median opinion length markers.</p>
                 </div>
               </div>
-              <div id="serviceMixChart" class="chart"></div>
-            </article>
-
-            <article class="panel">
-              <div class="panel-header">
-                <div>
-                  <h3>Template-Service Concentration</h3>
-                  <p>Which services dominate each template.</p>
-                </div>
-              </div>
-              <div id="templateServiceChart" class="chart"></div>
+              <div id="serviceVolumeLengthChart" class="chart xlarge"></div>
             </article>
 
             <article class="panel full">
@@ -244,16 +186,184 @@
                 <table id="serviceTable"></table>
               </div>
             </article>
+
+            <article class="panel full">
+              <div class="panel-header">
+                <div>
+                  <h3>BO Team Opinion Extremes</h3>
+                  <p>Highest and lowest median opinion word counts by BO team.</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table id="boTeamExtremesTable"></table>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" data-view-panel="pages">
+          <div class="dashboard-grid">
+            <article class="panel full">
+              <div class="panel-header">
+                <div>
+                  <h3>Page Count Trend</h3>
+                  <p>BO-validation-period averages for total pages, pre-opinion pages, and annex pages.</p>
+                </div>
+                <div class="panel-controls">
+                  <select id="pageTrendPeriod" class="compact-select">
+                    <option value="month" selected>Monthly</option>
+                    <option value="quarter">Quarterly</option>
+                  </select>
+                  <select id="pageTrendMetric" class="compact-select">
+                    <option value="Document Page Count" selected>Total page count</option>
+                    <option value="Page count before opinion">Pages before opinion</option>
+                    <option value="Annex Page Count">Annex page count</option>
+                  </select>
+                </div>
+              </div>
+              <div id="pageTrendChart" class="chart xlarge"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <h3>Annex Load By Template</h3>
+                  <p>Median annex pages and annex share of total pages.</p>
+                </div>
+              </div>
+              <div id="annexTemplateChart" class="chart"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <h3>Page Composition</h3>
+                  <p>Average pre-opinion, opinion, and annex pages by template.</p>
+                </div>
+              </div>
+              <div id="pageCompositionChart" class="chart"></div>
+            </article>
+
+            <article class="panel full">
+              <div class="panel-header">
+                <div>
+                  <h3>Monthly Page Composition</h3>
+                  <p>Monthly average pre-opinion, opinion, and annex pages by BO validation month.</p>
+                </div>
+              </div>
+              <div id="pageCompositionTimeChart" class="chart xlarge"></div>
+            </article>
+
+            <article class="panel full">
+              <div class="panel-header">
+                <div>
+                  <h3>Page Count Detail</h3>
+                  <p>Template-level page, annex, and pre-opinion page summaries.</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table id="pageSummaryTable" class="page-summary-table"></table>
+              </div>
+            </article>
+
+            <article class="panel full">
+              <div class="panel-header">
+                <div>
+                  <h3>Largest Annexes</h3>
+                  <p>Documents with the largest annex page counts in the current filter.</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table id="annexOutlierTable"></table>
+              </div>
+            </article>
+
+            <article class="panel full">
+              <div class="panel-header">
+                <div>
+                  <h3>AFS Process Page Counts</h3>
+                  <p>AFS rows only, comparing Old and New values from the New AFS Process field.</p>
+                </div>
+              </div>
+              <div id="afsProcessPageChart" class="chart xlarge"></div>
+              <div class="table-wrap">
+                <table id="afsProcessPageTable"></table>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" data-view-panel="noteTypes">
+          <div class="dashboard-grid">
+            <article class="panel full">
+              <div class="panel-header">
+                <div>
+                  <h3>Monthly Documents By MC Note Type</h3>
+                  <p>BO-validation-month document counts split by MC note type, with three-month moving averages. Missing types are excluded.</p>
+                </div>
+                <div class="panel-controls checkbox-pills" aria-label="Monthly MC note type selector">
+                  <label class="checkbox-pill">
+                    <input type="checkbox" data-mc-month-type="NOTEMCDEC" checked>
+                    <span>Decision</span>
+                  </label>
+                  <label class="checkbox-pill">
+                    <input type="checkbox" data-mc-month-type="NOTEMCINFO" checked>
+                    <span>Info</span>
+                  </label>
+                  <label class="checkbox-pill">
+                    <input type="checkbox" data-mc-month-type="NOTEMCDISC" checked>
+                    <span>Discussion</span>
+                  </label>
+                </div>
+              </div>
+              <div id="mcNoteTypeMonthChart" class="chart xlarge"></div>
+            </article>
+
+            <article class="panel full">
+              <div class="panel-header">
+                <div>
+                  <h3>MC Notes With Opinions</h3>
+                  <p>Monthly documents with at least one service opinion, split by decision, information, and discussion note type.</p>
+                </div>
+                <div class="panel-controls checkbox-pills" aria-label="MC note opinion type selector">
+                  <label class="checkbox-pill">
+                    <input type="checkbox" data-mc-opinion-type="NOTEMCDEC" checked>
+                    <span>Decision</span>
+                  </label>
+                  <label class="checkbox-pill">
+                    <input type="checkbox" data-mc-opinion-type="NOTEMCINFO" checked>
+                    <span>Info</span>
+                  </label>
+                  <label class="checkbox-pill">
+                    <input type="checkbox" data-mc-opinion-type="NOTEMCDISC" checked>
+                    <span>Discussion</span>
+                  </label>
+                </div>
+              </div>
+              <div id="infoDiscussionOpinionChart" class="chart xlarge"></div>
+            </article>
+
+            <article class="panel full">
+              <div class="panel-header">
+                <div>
+                  <h3>MC Note Type Detail</h3>
+                  <p>Document volume and date coverage for populated MC note types.</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table id="mcNoteTypeTable"></table>
+              </div>
+            </article>
           </div>
         </section>
 
         <section class="view" data-view-panel="authors">
           <div class="dashboard-grid">
-            <article class="panel full">
+            <article class="panel">
               <div class="panel-header">
                 <div>
-                  <h3>Author / Service-Office Length Profile</h3>
-                  <p>Author values behave like service-office codes; use with template filters for fair comparison.</p>
+                  <h3>Longest Author Groups</h3>
+                  <p>Highest median Text Before Opinions.</p>
                 </div>
                 <select id="authorMinDocs" class="compact-select">
                   <option value="5">Min 5 docs</option>
@@ -261,93 +371,29 @@
                   <option value="20">Min 20 docs</option>
                 </select>
               </div>
-              <div id="authorLengthChart" class="chart xlarge"></div>
+              <div id="authorLengthChart" class="chart"></div>
             </article>
 
             <article class="panel">
               <div class="panel-header">
                 <div>
                   <h3>Shortest Author Groups</h3>
-                  <p>Lowest median text-before-opinions words.</p>
+                  <p>Lowest median Text Before Opinions.</p>
                 </div>
               </div>
               <div id="shortAuthorChart" class="chart"></div>
-            </article>
-
-            <article class="panel">
-              <div class="panel-header">
-                <div>
-                  <h3>Author Coverage</h3>
-                  <p>Missing author rows by template.</p>
-                </div>
-              </div>
-              <div id="authorCoverageChart" class="chart"></div>
             </article>
 
             <article class="panel full">
               <div class="panel-header">
                 <div>
                   <h3>Author Detail Table</h3>
-                  <p>Median words, pages, service sections, and template mix.</p>
+                  <p>Text Before Opinions first, with page count shown as secondary context.</p>
                 </div>
               </div>
               <div class="table-wrap">
-                <table id="authorTable"></table>
+                <table id="authorTable" class="author-detail-table"></table>
               </div>
-            </article>
-          </div>
-        </section>
-
-        <section class="view" data-view-panel="time">
-          <div class="dashboard-grid">
-            <article class="panel full">
-              <div class="panel-header">
-                <div>
-                  <h3>Monthly Volume</h3>
-                  <p>Validation-month document count by template.</p>
-                </div>
-              </div>
-              <div id="timeVolumeChart" class="chart xlarge"></div>
-            </article>
-
-            <article class="panel full">
-              <div class="panel-header">
-                <div>
-                  <h3>Monthly Average Word Count</h3>
-                  <p>Filtered monthly mean with a three-month moving average.</p>
-                </div>
-              </div>
-              <div id="timeWordsChart" class="chart xlarge"></div>
-            </article>
-
-            <article class="panel full">
-              <div class="panel-header">
-                <div>
-                  <h3>Monthly Manual Correction Rate</h3>
-                  <p>Manual share over time, by template.</p>
-                </div>
-              </div>
-              <div id="timeManualChart" class="chart xlarge"></div>
-            </article>
-
-            <article class="panel full">
-              <div class="panel-header">
-                <div>
-                  <h3>Cumulative Database Build</h3>
-                  <p>Running document totals by validation month.</p>
-                </div>
-              </div>
-              <div id="timeCumulativeChart" class="chart xlarge"></div>
-            </article>
-
-            <article class="panel full">
-              <div class="panel-header">
-                <div>
-                  <h3>Calendar Heatmap</h3>
-                  <p>Monthly document volume intensity.</p>
-                </div>
-              </div>
-              <div id="calendarHeatmap" class="heatmap"></div>
             </article>
           </div>
         </section>
@@ -358,7 +404,7 @@
               <div class="panel-header">
                 <div>
                   <h3>Statistical and Data Integrity Tests</h3>
-                  <p>Automated checks generated from the Database-tab analysis exports.</p>
+                  <p>Automated checks generated from the Master_Table_Q analysis exports.</p>
                 </div>
               </div>
               <div id="testCards" class="test-grid"></div>
@@ -404,22 +450,6 @@
             <article class="panel full">
               <div class="panel-header">
                 <div>
-                  <h3>Batch Folder Ranking</h3>
-                  <p>Volume, mean words, manual rate, and quality flags.</p>
-                </div>
-                <select id="batchSort" class="compact-select">
-                  <option value="documents">Documents</option>
-                  <option value="manualRate">Manual Rate</option>
-                  <option value="meanWords">Mean Words</option>
-                  <option value="qualityFlags">Quality Flags</option>
-                </select>
-              </div>
-              <div id="batchChart" class="chart xlarge"></div>
-            </article>
-
-            <article class="panel full">
-              <div class="panel-header">
-                <div>
                   <h3>Batch Folder Detail</h3>
                   <p>Click a row to lock the batch filter.</p>
                 </div>
@@ -437,20 +467,10 @@
               <div class="panel-header">
                 <div>
                   <h3>Quality Flags</h3>
-                  <p>Missing dates, future dates, annex gaps, and GED gaps.</p>
+                  <p>Missing dates, future dates, and BO date gaps.</p>
                 </div>
               </div>
               <div id="qualityChart" class="chart"></div>
-            </article>
-
-            <article class="panel">
-              <div class="panel-header">
-                <div>
-                  <h3>GED Match Status</h3>
-                  <p>Match-status distribution in the current filter.</p>
-                </div>
-              </div>
-              <div id="gedChart" class="chart"></div>
             </article>
 
             <article class="panel full">
@@ -479,7 +499,7 @@
                   <option value="words-desc">Words high to low</option>
                   <option value="words-asc">Words low to high</option>
                   <option value="pages-desc">Pages high to low</option>
-                  <option value="date-desc">Newest first</option>
+                  <option value="date-desc">Newest BO date</option>
                   <option value="manual-first">Manual first</option>
                 </select>
                 <button id="prevPage" class="ghost-button" type="button">Prev</button>
@@ -496,6 +516,85 @@
     </div>
 
     <div id="tooltip" class="tooltip" role="status" aria-live="polite"></div>
-    <script src="app.js?v=20260529-momentum-mean-median"></script>
+    <script>
+      (function () {
+        function dogFaceSvg(faceColor, earColor, spotColor) {
+          return '<svg viewBox="0 0 64 64" aria-hidden="true">' +
+            '<path d="M18 24 C9 18, 8 8, 17 7 C26 7, 27 17, 24 25 Z" fill="' + earColor + '"></path>' +
+            '<path d="M46 24 C55 18, 56 8, 47 7 C38 7, 37 17, 40 25 Z" fill="' + earColor + '"></path>' +
+            '<circle cx="32" cy="33" r="24" fill="' + faceColor + '"></circle>' +
+            '<path d="M18 29 C20 18, 31 15, 34 26 C28 30, 24 32, 18 29 Z" fill="' + spotColor + '" opacity="0.82"></path>' +
+            '<circle cx="24" cy="32" r="3.2" fill="#17212b"></circle><circle cx="40" cy="32" r="3.2" fill="#17212b"></circle>' +
+            '<path d="M29 40 C31 38, 33 38, 35 40 C34 43, 30 43, 29 40 Z" fill="#17212b"></path>' +
+            '<path d="M32 42 C30 47, 24 46, 22 43" fill="none" stroke="#17212b" stroke-width="2.4" stroke-linecap="round"></path>' +
+            '<path d="M32 42 C34 47, 40 46, 42 43" fill="none" stroke="#17212b" stroke-width="2.4" stroke-linecap="round"></path>' +
+            '<path d="M32 47 C35 48, 36 51, 33 53 C30 52, 29 49, 32 47 Z" fill="#e86f7e"></path></svg>';
+        }
+
+        function makeDogParticle(layer, className, options) {
+          var palettes = [
+            ["#ffd1dc", "#ff6fa3", "#fff4f8"],
+            ["#ffe4ef", "#d9467f", "#ff9fc2"],
+            ["#fff7fb", "#b83272", "#ffc2d9"],
+            ["#f8b7cf", "#8f245d", "#ffe6f0"],
+            ["#ffffff", "#ff8fbd", "#f6a6c9"]
+          ];
+          var palette = palettes[Math.floor(Math.random() * palettes.length)];
+          var dog = document.createElement("div");
+          dog.className = "dog-particle " + className;
+          dog.style.setProperty("--size", options.size + "px");
+          dog.style.setProperty("--start-x", options.x + "px");
+          dog.style.setProperty("--start-y", options.y + "px");
+          dog.style.setProperty("--dx", (options.dx || 0) + "px");
+          dog.style.setProperty("--dy", (options.dy || 0) + "px");
+          dog.style.setProperty("--drift", (options.drift || 0) + "px");
+          dog.style.setProperty("--spin", options.spin + "deg");
+          dog.style.setProperty("--duration", options.duration + "s");
+          dog.style.setProperty("--delay", (options.delay || 0) + "s");
+          dog.innerHTML = dogFaceSvg(palette[0], palette[1], palette[2]);
+          layer.appendChild(dog);
+        }
+
+        window.triggerDogRain = function () {
+          document.documentElement.dataset.puppyStorm = String(Number(document.documentElement.dataset.puppyStorm || 0) + 1);
+          var existing = document.querySelector(".dog-rain-layer");
+          if (existing) existing.remove();
+          var layer = document.createElement("div");
+          layer.className = "dog-rain-layer";
+          document.body.appendChild(layer);
+          var face = document.getElementById("elevenFace");
+          var rect = face ? face.getBoundingClientRect() : null;
+          var centerX = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
+          var centerY = rect ? rect.top + rect.height / 2 : 90;
+
+          for (var i = 0; i < 34; i += 1) {
+            makeDogParticle(layer, "dog-burst", {
+              x: centerX,
+              y: centerY,
+              dx: Math.random() * 330 - 165,
+              dy: Math.random() * 230 - 150,
+              spin: Math.random() * 520 - 260,
+              size: Math.random() * 18 + 24,
+              duration: Math.random() * 0.55 + 1
+            });
+          }
+
+          for (var j = 0; j < 48; j += 1) {
+            makeDogParticle(layer, "dog-rain", {
+              x: Math.random() * window.innerWidth,
+              y: -80,
+              drift: Math.random() * 180 - 90,
+              spin: Math.random() * 420 - 210,
+              size: Math.random() * 24 + 24,
+              duration: Math.random() * 1.9 + 2.5,
+              delay: Math.random() * 1.35 + 0.18
+            });
+          }
+          window.setTimeout(function () { layer.remove(); }, 6200);
+        };
+        document.documentElement.dataset.puppyRainReady = "true";
+      }());
+    </script>
+    <script src="app.js?v=20260602-pre2023-toggle-1"></script>
   </body>
 </html>

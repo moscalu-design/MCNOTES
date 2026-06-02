@@ -29,27 +29,49 @@ const DEPARTMENTS = [
   "OTHER",
 ];
 
+const MC_NOTE_TYPES = ["NOTEMCDEC", "NOTEMCINFO", "NOTEMCDISC"];
+const PAGE_COMPOSITION_PARTS = ["Pre-opinion", "Opinion", "Annex"];
+const PAGE_COMPOSITION_COLORS = {
+  "Pre-opinion": "#376996",
+  Opinion: "#2a9d8f",
+  Annex: "#b38b00",
+};
+const AFS_PROCESS_COLORS = {
+  Old: "#b38b00",
+  New: "#376996",
+};
+
 const state = {
   raw: null,
   records: [],
   filtered: [],
   selectedTemplates: new Set(),
+  selectedMcNoteTypes: new Set(MC_NOTE_TYPES),
   selectedExtractions: new Set(),
   batch: "All",
+  product: "All",
   ged: "All",
   dateFrom: "",
   dateTo: "",
   search: "",
   hideFutureDates: false,
+  excludePre2023Validation: false,
   onlyQualityIssues: false,
   serviceFocus: "",
-  view: "overview",
+  opinionWordFloor: 0,
+  view: "services",
   distributionMetric: "Text Before Opinions",
   batchSort: "documents",
   recordSort: "words-desc",
   testDetail: "all-warnings",
   serviceWindow: "all",
-  serviceMomentumMetric: "coverage",
+  serviceMomentumMetric: "meanWords",
+  overviewTrendMetric: "Document Page Count",
+  timeTrendMetric: "Document Page Count",
+  pageTrendMetric: "Document Page Count",
+  pageTrendPeriod: "month",
+  selectedMcMonthTypes: new Set(MC_NOTE_TYPES),
+  selectedMcOpinionTypes: new Set(MC_NOTE_TYPES),
   authorMinDocs: 10,
   page: 1,
   pageSize: 40,
@@ -96,6 +118,26 @@ function formatDate(value) {
   return value || "No date";
 }
 
+function timelineDate(row) {
+  const date = row["BO Validation Date"] || "";
+  return date === "2000-01-01" ? "" : date;
+}
+
+function timelineMonth(row) {
+  const month = row["BO Validation Month"] || "";
+  return month === "2000-01" ? "" : month;
+}
+
+function opinionPassesFloor(words) {
+  return n(words) > state.opinionWordFloor;
+}
+
+function opinionFloorText() {
+  return state.opinionWordFloor > 0
+    ? `Excluding service opinions with ${fmtInt.format(state.opinionWordFloor)} words or fewer.`
+    : "Including all service opinions.";
+}
+
 function shortLabel(value, max = 28) {
   const text = String(value ?? "Missing");
   return text.length > max ? `${text.slice(0, max - 1)}...` : text;
@@ -105,13 +147,21 @@ function templateColor(template) {
   return COLORS[template] || COLORS.neutral;
 }
 
+function categoryColor(value, index = 0) {
+  const named = {
+    NOTEMCDEC: "#376996",
+    NOTEMCINFO: "#2a9d8f",
+    NOTEMCDISC: "#c1666b",
+  };
+  const palette = ["#376996", "#2a9d8f", "#c1666b", "#b88a2c", "#7759a6", "#2f8db3"];
+  return named[value] || palette[index % palette.length];
+}
+
 function hasQualityIssue(row) {
   return Boolean(
     row["Has Missing Date"] ||
       row["Is Future Date"] ||
-      row["Has Missing GED"] ||
-      row["Annex Page Count"] === null ||
-      row["Annex Page Count"] === undefined
+      row["Has Missing BO Date"]
   );
 }
 
@@ -119,10 +169,7 @@ function qualityFlags(row) {
   const flags = [];
   if (row["Has Missing Date"]) flags.push("Missing date");
   if (row["Is Future Date"]) flags.push("Future date");
-  if (row["Has Missing GED"]) flags.push("Missing GED");
-  if (row["Annex Page Count"] === null || row["Annex Page Count"] === undefined) {
-    flags.push("Missing annex");
-  }
+  if (row["Has Missing BO Date"]) flags.push("Missing BO date");
   return flags;
 }
 
@@ -164,7 +211,8 @@ function summarize(rows) {
   const manual = rows.filter((row) => row.Extraction === "Manual").length;
   const future = rows.filter((row) => row["Is Future Date"]).length;
   const quality = rows.filter(hasQualityIssue).length;
-  const dates = rows.map((row) => row["Validation Date"]).filter(Boolean).sort();
+  const boDates = rows.filter((row) => row["BO Validation Date"]).length;
+  const dates = rows.map(timelineDate).filter(Boolean).sort();
   return {
     docs,
     words,
@@ -172,9 +220,12 @@ function summarize(rows) {
     manual,
     future,
     quality,
+    boDates,
     meanWords: mean(rows.map((row) => row["Text Before Opinions"])),
     medianWords: quantile(rows.map((row) => row["Text Before Opinions"]), 0.5),
     meanPages: mean(rows.map((row) => row["Document Page Count"])),
+    medianPages: quantile(rows.map((row) => row["Document Page Count"]), 0.5),
+    serviceOpinions: serviceOpinionRows(rows).length,
     dateMin: dates[0] || "",
     dateMax: dates[dates.length - 1] || "",
   };
@@ -200,7 +251,7 @@ function templateSummaries(rows) {
 }
 
 function getDateBounds(records) {
-  const dates = records.map((row) => row["Validation Date"]).filter(Boolean).sort();
+  const dates = records.map(timelineDate).filter(Boolean).sort();
   return { min: dates[0] || "", max: dates[dates.length - 1] || "" };
 }
 
@@ -208,11 +259,15 @@ function populateFilters() {
   const templates = state.raw.meta.templates;
   const extractions = state.raw.meta.extractions;
   state.selectedTemplates = new Set(templates);
+  state.selectedMcNoteTypes = new Set(MC_NOTE_TYPES);
   state.selectedExtractions = new Set(extractions);
 
   $("templateFilters").innerHTML = templates
     .map((name) => `<button class="chip active" type="button" data-template="${escapeAttr(name)}">${escapeHtml(name)}</button>`)
     .join("");
+  $("mcNoteTypeFilters").innerHTML = MC_NOTE_TYPES.map(
+    (name) => `<button class="chip active" type="button" data-mc-filter-type="${escapeAttr(name)}">${escapeHtml(name)}</button>`
+  ).join("");
   $("extractionFilters").innerHTML = extractions
     .map((name) => `<button class="chip active" type="button" data-extraction="${escapeAttr(name)}">${escapeHtml(name)}</button>`)
     .join("");
@@ -222,20 +277,33 @@ function populateFilters() {
     .map((batch) => `<option value="${escapeAttr(batch)}">${escapeHtml(batch)}</option>`)
     .join("");
 
-  const gedValues = Array.from(
-    new Set(state.records.map((row) => row["GED Match Status"] || "Missing GED status"))
-  ).sort();
-  $("gedFilter").innerHTML = ["All", ...gedValues]
-    .map((value) => `<option value="${escapeAttr(value)}">${escapeHtml(shortLabel(value, 48))}</option>`)
-    .join("");
+  if ($("productFilter")) {
+    const products = ["All", ...(state.raw.meta.products || [])];
+    $("productFilter").innerHTML = products
+      .map((product) => `<option value="${escapeAttr(product)}">${escapeHtml(shortLabel(product, 58))}</option>`)
+      .join("");
+  }
+
+  if ($("gedFilter")) {
+    const gedValues = Array.from(
+      new Set(state.records.map((row) => row["GED Match Status"] || "Missing GED status"))
+    ).sort();
+    $("gedFilter").innerHTML = ["All", ...gedValues]
+      .map((value) => `<option value="${escapeAttr(value)}">${escapeHtml(shortLabel(value, 48))}</option>`)
+      .join("");
+  }
 
   const bounds = getDateBounds(state.records);
-  $("dateFrom").min = bounds.min;
-  $("dateFrom").max = bounds.max;
-  $("dateTo").min = bounds.min;
-  $("dateTo").max = bounds.max;
-  $("dateFrom").value = "";
-  $("dateTo").value = "";
+  if ($("dateFrom")) {
+    $("dateFrom").min = bounds.min;
+    $("dateFrom").max = bounds.max;
+    $("dateFrom").value = "";
+  }
+  if ($("dateTo")) {
+    $("dateTo").min = bounds.min;
+    $("dateTo").max = bounds.max;
+    $("dateTo").value = "";
+  }
   state.dateFrom = "";
   state.dateTo = "";
 }
@@ -252,6 +320,22 @@ function bindEvents() {
     }
     document.querySelectorAll("[data-template]").forEach((node) => {
       node.classList.toggle("active", state.selectedTemplates.has(node.dataset.template));
+    });
+    state.page = 1;
+    update();
+  });
+
+  $("mcNoteTypeFilters").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-mc-filter-type]");
+    if (!button) return;
+    const value = button.dataset.mcFilterType;
+    if (state.selectedMcNoteTypes.has(value)) {
+      state.selectedMcNoteTypes.delete(value);
+    } else {
+      state.selectedMcNoteTypes.add(value);
+    }
+    document.querySelectorAll("[data-mc-filter-type]").forEach((node) => {
+      node.classList.toggle("active", state.selectedMcNoteTypes.has(node.dataset.mcFilterType));
     });
     state.page = 1;
     update();
@@ -279,67 +363,173 @@ function bindEvents() {
     update();
   });
 
-  $("gedFilter").addEventListener("change", (event) => {
-    state.ged = event.target.value;
+  if ($("productFilter")) {
+    $("productFilter").addEventListener("change", (event) => {
+      state.product = event.target.value;
+      state.page = 1;
+      update();
+    });
+  }
+
+  if ($("gedFilter")) {
+    $("gedFilter").addEventListener("change", (event) => {
+      state.ged = event.target.value;
+      state.page = 1;
+      update();
+    });
+  }
+
+  if ($("dateFrom")) {
+    $("dateFrom").addEventListener("change", (event) => {
+      state.dateFrom = event.target.value;
+      state.page = 1;
+      update();
+    });
+  }
+
+  if ($("dateTo")) {
+    $("dateTo").addEventListener("change", (event) => {
+      state.dateTo = event.target.value;
+      state.page = 1;
+      update();
+    });
+  }
+
+  if ($("searchInput")) {
+    $("searchInput").addEventListener("input", (event) => {
+      state.search = event.target.value.trim().toLowerCase();
+      state.page = 1;
+      update();
+    });
+  }
+
+  if ($("hideFutureDates")) {
+    $("hideFutureDates").addEventListener("change", (event) => {
+      state.hideFutureDates = event.target.checked;
+      state.page = 1;
+      update();
+    });
+  }
+
+  $("excludePre2023Validation").addEventListener("change", (event) => {
+    state.excludePre2023Validation = event.target.checked;
     state.page = 1;
     update();
   });
 
-  $("dateFrom").addEventListener("change", (event) => {
-    state.dateFrom = event.target.value;
+  if ($("onlyQualityIssues")) {
+    $("onlyQualityIssues").addEventListener("change", (event) => {
+      state.onlyQualityIssues = event.target.checked;
+      state.page = 1;
+      update();
+    });
+  }
+
+  $("applyOpinionThreshold").addEventListener("click", applyOpinionThreshold);
+  $("opinionThresholdInput").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") applyOpinionThreshold();
+  });
+  $("resetOpinionThreshold").addEventListener("click", () => {
+    state.opinionWordFloor = 0;
+    $("opinionThresholdInput").value = 0;
+    $("opinionThresholdStatus").textContent = opinionFloorText();
     state.page = 1;
     update();
   });
 
-  $("dateTo").addEventListener("change", (event) => {
-    state.dateTo = event.target.value;
-    state.page = 1;
-    update();
-  });
-
-  $("searchInput").addEventListener("input", (event) => {
-    state.search = event.target.value.trim().toLowerCase();
-    state.page = 1;
-    update();
-  });
-
-  $("hideFutureDates").addEventListener("change", (event) => {
-    state.hideFutureDates = event.target.checked;
-    state.page = 1;
-    update();
-  });
-
-  $("onlyQualityIssues").addEventListener("change", (event) => {
-    state.onlyQualityIssues = event.target.checked;
-    state.page = 1;
-    update();
-  });
-
-  $("resetFilters").addEventListener("click", resetFilters);
+  if ($("resetFilters")) $("resetFilters").addEventListener("click", resetFilters);
   $("clearAllFilters").addEventListener("click", resetFilters);
   $("collapseSlicers").addEventListener("click", () => {
     document.querySelector(".sidebar").classList.toggle("compact");
   });
   $("focusServices").addEventListener("click", () => switchView("services"));
   $("focusTests").addEventListener("click", () => switchView("tests"));
-  $("downloadFiltered").addEventListener("click", downloadFilteredCsv);
-  $("distributionMetric").addEventListener("change", (event) => {
-    state.distributionMetric = event.target.value;
-    updateCharts();
+  $("refreshData").addEventListener("click", refreshDashboardData);
+  if ($("downloadFiltered")) $("downloadFiltered").addEventListener("click", downloadFilteredCsv);
+  const elevenFace = $("elevenFace");
+  if (elevenFace) {
+    elevenFace.addEventListener("click", triggerDogRain);
+    elevenFace.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        triggerDogRain();
+      }
+    });
+  }
+  document.addEventListener("click", (event) => {
+    if (event.target.closest("#elevenFace")) triggerDogRain();
   });
-  $("batchSort").addEventListener("change", (event) => {
-    state.batchSort = event.target.value;
-    renderBatchView();
+  if ($("distributionMetric")) {
+    $("distributionMetric").addEventListener("change", (event) => {
+      state.distributionMetric = event.target.value;
+      updateCharts();
+    });
+  }
+  if ($("batchSort")) {
+    $("batchSort").addEventListener("change", (event) => {
+      state.batchSort = event.target.value;
+      renderBatchView();
+    });
+  }
+  if ($("overviewTrendMetric")) {
+    $("overviewTrendMetric").addEventListener("change", (event) => {
+      state.overviewTrendMetric = event.target.value;
+      renderOverviewPageTrendChart();
+    });
+  }
+  if ($("timeTrendMetric")) {
+    $("timeTrendMetric").addEventListener("change", (event) => {
+      state.timeTrendMetric = event.target.value;
+      renderTimePagesChart();
+    });
+  }
+  if ($("pageTrendMetric")) {
+    $("pageTrendMetric").addEventListener("change", (event) => {
+      state.pageTrendMetric = event.target.value;
+      renderPageTrendChart();
+    });
+  }
+  if ($("pageTrendPeriod")) {
+    $("pageTrendPeriod").addEventListener("change", (event) => {
+      state.pageTrendPeriod = event.target.value;
+      renderPageTrendChart();
+    });
+  }
+  document.querySelectorAll("[data-mc-opinion-type]").forEach((input) => {
+    input.addEventListener("change", (event) => {
+      const type = event.target.dataset.mcOpinionType;
+      if (event.target.checked) {
+        state.selectedMcOpinionTypes.add(type);
+      } else {
+        state.selectedMcOpinionTypes.delete(type);
+      }
+      updateMcTypeControls();
+      renderInfoDiscussionOpinionChart();
+    });
+  });
+  document.querySelectorAll("[data-mc-month-type]").forEach((input) => {
+    input.addEventListener("change", (event) => {
+      const type = event.target.dataset.mcMonthType;
+      if (event.target.checked) {
+        state.selectedMcMonthTypes.add(type);
+      } else {
+        state.selectedMcMonthTypes.delete(type);
+      }
+      updateMcTypeControls();
+      renderMcNoteTypeMonthChart();
+    });
   });
   $("recordSort").addEventListener("change", (event) => {
     state.recordSort = event.target.value;
     state.page = 1;
     renderRecordTable();
   });
-  $("serviceWindow").addEventListener("change", (event) => {
-    state.serviceWindow = event.target.value;
-    renderServicesView();
-  });
+  if ($("serviceWindow")) {
+    $("serviceWindow").addEventListener("change", (event) => {
+      state.serviceWindow = event.target.value;
+      renderServicesView();
+    });
+  }
   $("serviceMomentumMetric").addEventListener("change", (event) => {
     state.serviceMomentumMetric = event.target.value;
     renderServiceMomentumChart();
@@ -375,26 +565,136 @@ function bindEvents() {
 
 function resetFilters() {
   state.selectedTemplates = new Set(state.raw.meta.templates);
+  state.selectedMcNoteTypes = new Set(MC_NOTE_TYPES);
   state.selectedExtractions = new Set(state.raw.meta.extractions);
-  document.querySelectorAll("[data-template], [data-extraction]").forEach((button) => {
+  document.querySelectorAll("[data-template], [data-mc-filter-type], [data-extraction]").forEach((button) => {
     button.classList.add("active");
   });
   state.batch = "All";
+  state.product = "All";
   state.ged = "All";
   $("batchFilter").value = "All";
-  $("gedFilter").value = "All";
+  if ($("productFilter")) $("productFilter").value = "All";
+  if ($("gedFilter")) $("gedFilter").value = "All";
   const bounds = getDateBounds(state.records);
   state.dateFrom = "";
   state.dateTo = "";
-  $("dateFrom").value = "";
-  $("dateTo").value = "";
+  if ($("dateFrom")) $("dateFrom").value = "";
+  if ($("dateTo")) $("dateTo").value = "";
   state.search = "";
-  $("searchInput").value = "";
+  if ($("searchInput")) $("searchInput").value = "";
   state.hideFutureDates = false;
+  state.excludePre2023Validation = false;
   state.onlyQualityIssues = false;
   state.serviceFocus = "";
-  $("hideFutureDates").checked = false;
-  $("onlyQualityIssues").checked = false;
+  state.opinionWordFloor = 0;
+  state.selectedMcMonthTypes = new Set(MC_NOTE_TYPES);
+  state.selectedMcOpinionTypes = new Set(MC_NOTE_TYPES);
+  $("opinionThresholdInput").value = 0;
+  $("opinionThresholdStatus").textContent = opinionFloorText();
+  if ($("hideFutureDates")) $("hideFutureDates").checked = false;
+  $("excludePre2023Validation").checked = false;
+  if ($("onlyQualityIssues")) $("onlyQualityIssues").checked = false;
+  updateMcTypeControls();
+  state.page = 1;
+  update();
+}
+
+function captureFilterState() {
+  return {
+    selectedTemplates: new Set(state.selectedTemplates),
+    selectedMcNoteTypes: new Set(state.selectedMcNoteTypes),
+    selectedExtractions: new Set(state.selectedExtractions),
+    batch: state.batch,
+    product: state.product,
+    ged: state.ged,
+    dateFrom: state.dateFrom,
+    dateTo: state.dateTo,
+    search: state.search,
+    hideFutureDates: state.hideFutureDates,
+    excludePre2023Validation: state.excludePre2023Validation,
+    onlyQualityIssues: state.onlyQualityIssues,
+    serviceFocus: state.serviceFocus,
+    opinionWordFloor: state.opinionWordFloor,
+    selectedMcMonthTypes: new Set(state.selectedMcMonthTypes),
+    selectedMcOpinionTypes: new Set(state.selectedMcOpinionTypes),
+    page: state.page,
+  };
+}
+
+function restoreFilterState(snapshot) {
+  const templates = state.raw.meta.templates || [];
+  const extractions = state.raw.meta.extractions || [];
+  const batches = state.raw.meta.batchFolders || [];
+  const products = state.raw.meta.products || [];
+  const gedValues = Array.from(new Set(state.records.map((row) => row["GED Match Status"] || "Missing GED status")));
+
+  const selectedTemplates = Array.from(snapshot.selectedTemplates).filter((value) => templates.includes(value));
+  state.selectedTemplates = new Set(selectedTemplates.length ? selectedTemplates : templates);
+  const selectedMcNoteTypes = Array.from(snapshot.selectedMcNoteTypes || MC_NOTE_TYPES).filter((value) => MC_NOTE_TYPES.includes(value));
+  state.selectedMcNoteTypes = new Set(selectedMcNoteTypes);
+  const selectedExtractions = Array.from(snapshot.selectedExtractions).filter((value) => extractions.includes(value));
+  state.selectedExtractions = new Set(selectedExtractions.length ? selectedExtractions : extractions);
+
+  state.batch = snapshot.batch === "All" || batches.includes(snapshot.batch) ? snapshot.batch : "All";
+  state.product = snapshot.product === "All" || products.includes(snapshot.product) ? snapshot.product : "All";
+  state.ged = snapshot.ged === "All" || gedValues.includes(snapshot.ged) ? snapshot.ged : "All";
+  state.dateFrom = snapshot.dateFrom;
+  state.dateTo = snapshot.dateTo;
+  state.search = snapshot.search;
+  state.hideFutureDates = snapshot.hideFutureDates;
+  state.excludePre2023Validation = Boolean(snapshot.excludePre2023Validation);
+  state.onlyQualityIssues = snapshot.onlyQualityIssues;
+  state.serviceFocus = snapshot.serviceFocus;
+  state.opinionWordFloor = snapshot.opinionWordFloor;
+  state.selectedMcMonthTypes = new Set(
+    Array.from(snapshot.selectedMcMonthTypes || MC_NOTE_TYPES).filter((type) => MC_NOTE_TYPES.includes(type))
+  );
+  if (!state.selectedMcMonthTypes.size) state.selectedMcMonthTypes = new Set(MC_NOTE_TYPES);
+  state.selectedMcOpinionTypes = new Set(
+    Array.from(snapshot.selectedMcOpinionTypes || MC_NOTE_TYPES).filter((type) => MC_NOTE_TYPES.includes(type))
+  );
+  if (!state.selectedMcOpinionTypes.size) state.selectedMcOpinionTypes = new Set(MC_NOTE_TYPES);
+  state.page = snapshot.page || 1;
+
+  document.querySelectorAll("[data-template]").forEach((button) => {
+    button.classList.toggle("active", state.selectedTemplates.has(button.dataset.template));
+  });
+  document.querySelectorAll("[data-mc-filter-type]").forEach((button) => {
+    button.classList.toggle("active", state.selectedMcNoteTypes.has(button.dataset.mcFilterType));
+  });
+  document.querySelectorAll("[data-extraction]").forEach((button) => {
+    button.classList.toggle("active", state.selectedExtractions.has(button.dataset.extraction));
+  });
+  $("batchFilter").value = state.batch;
+  if ($("productFilter")) $("productFilter").value = state.product;
+  if ($("gedFilter")) $("gedFilter").value = state.ged;
+  if ($("dateFrom")) $("dateFrom").value = state.dateFrom;
+  if ($("dateTo")) $("dateTo").value = state.dateTo;
+  if ($("searchInput")) $("searchInput").value = state.search;
+  if ($("hideFutureDates")) $("hideFutureDates").checked = state.hideFutureDates;
+  $("excludePre2023Validation").checked = state.excludePre2023Validation;
+  if ($("onlyQualityIssues")) $("onlyQualityIssues").checked = state.onlyQualityIssues;
+  $("opinionThresholdInput").value = state.opinionWordFloor;
+  $("opinionThresholdStatus").textContent = opinionFloorText();
+}
+
+function updateMcTypeControls() {
+  document.querySelectorAll("[data-mc-month-type]").forEach((input) => {
+    input.checked = state.selectedMcMonthTypes.has(input.dataset.mcMonthType);
+    input.closest(".checkbox-pill")?.classList.toggle("active", input.checked);
+  });
+  document.querySelectorAll("[data-mc-opinion-type]").forEach((input) => {
+    input.checked = state.selectedMcOpinionTypes.has(input.dataset.mcOpinionType);
+    input.closest(".checkbox-pill")?.classList.toggle("active", input.checked);
+  });
+}
+
+function applyOpinionThreshold() {
+  const raw = Number($("opinionThresholdInput").value);
+  state.opinionWordFloor = Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0;
+  $("opinionThresholdInput").value = state.opinionWordFloor;
+  $("opinionThresholdStatus").textContent = opinionFloorText();
   state.page = 1;
   update();
 }
@@ -414,17 +714,20 @@ function applyFilters() {
   const search = state.search;
   state.filtered = state.records.filter((row) => {
     if (!state.selectedTemplates.has(row["Template Type"])) return false;
+    if (!state.selectedMcNoteTypes.has(mcNoteTypeLabel(row))) return false;
     if (!state.selectedExtractions.has(row.Extraction)) return false;
     if (state.batch !== "All" && row["Batch Folder"] !== state.batch) return false;
+    if (state.product !== "All" && row["Financing Product Name"] !== state.product) return false;
     const ged = row["GED Match Status"] || "Missing GED status";
     if (state.ged !== "All" && ged !== state.ged) return false;
-    const date = row["Validation Date"];
+    const date = timelineDate(row);
     if (state.dateFrom && date && date < state.dateFrom) return false;
     if (state.dateTo && date && date > state.dateTo) return false;
     if (state.dateFrom && !date) return false;
+    if (state.excludePre2023Validation && (!date || date < "2023-01-01")) return false;
     if (state.hideFutureDates && row["Is Future Date"]) return false;
     if (state.onlyQualityIssues && !hasQualityIssue(row)) return false;
-    if (state.serviceFocus && n(row[state.serviceFocus]) <= 0) return false;
+    if (state.serviceFocus && !opinionPassesFloor(row[state.serviceFocus])) return false;
     if (search) {
       const haystack = [
         row["File Name"],
@@ -432,6 +735,11 @@ function applyFilters() {
         row["MC_Note_Type"],
         row["Batch Folder"],
         row["Template Type"],
+        row["Financing Product Name"],
+        row["BO PJ"],
+        row["BO RM"],
+        row["BO JU"],
+        row["BO ECON"],
       ]
         .join(" ")
         .toLowerCase();
@@ -458,35 +766,32 @@ function activeFilterSummary() {
   if (state.selectedTemplates.size !== state.raw.meta.templates.length) {
     parts.push(`Template: ${Array.from(state.selectedTemplates).join(", ")}`);
   }
+  if (state.selectedMcNoteTypes.size !== MC_NOTE_TYPES.length) {
+    parts.push(`MC Note Type: ${Array.from(state.selectedMcNoteTypes).join(", ")}`);
+  }
   if (state.selectedExtractions.size !== state.raw.meta.extractions.length) {
     parts.push(`Extraction: ${Array.from(state.selectedExtractions).join(", ")}`);
   }
   if (state.batch !== "All") parts.push(`Batch: ${state.batch}`);
+  if (state.product !== "All") parts.push(`Product: ${shortLabel(state.product, 24)}`);
   if (state.ged !== "All") parts.push(`GED: ${shortLabel(state.ged, 26)}`);
   if (state.dateFrom || state.dateTo) parts.push(`Date: ${state.dateFrom || "..."} to ${state.dateTo || "..."}`);
+  if (state.excludePre2023Validation) parts.push("BO date >= 01/01/2023");
   if (state.search) parts.push(`Search: ${state.search}`);
   if (state.hideFutureDates) parts.push("Future dates hidden");
   if (state.onlyQualityIssues) parts.push("Quality rows only");
   if (state.serviceFocus) parts.push(`Service: ${state.serviceFocus}`);
+  if (state.opinionWordFloor > 0) parts.push(`Opinion floor: > ${state.opinionWordFloor} words`);
   return parts.length ? parts.join(" | ") : "All records";
 }
 
 function updateCharts() {
   if (state.view === "overview") {
-    renderBoxChart();
-    renderTemplateDonut();
-    renderManualRateChart();
-    renderDepartmentChart();
-    renderScatterChart();
-  }
-  if (state.view === "time") {
-    renderTimeVolumeChart();
-    renderTimeWordsChart();
-    renderTimeManualChart();
-    renderTimeCumulativeChart();
-    renderCalendarHeatmap();
+    renderOverviewPageTrendChart();
   }
   if (state.view === "services") renderServicesView();
+  if (state.view === "pages") renderPagesView();
+  if (state.view === "noteTypes") renderNoteTypesView();
   if (state.view === "authors") renderAuthorsView();
   if (state.view === "batches") renderBatchView();
   if (state.view === "tests") renderTestsView();
@@ -496,14 +801,13 @@ function updateCharts() {
 
 function renderKpis() {
   const s = summarize(state.filtered);
-  const manualRate = s.docs ? (s.manual / s.docs) * 100 : 0;
   const qualityRate = s.docs ? (s.quality / s.docs) * 100 : 0;
   const kpis = [
-    ["Documents", fmtInt.format(s.docs), `${fmtInt.format(s.future)} future-dated`],
-    ["Total Words", fmtInt.format(s.words), `${fmtOne.format(s.meanWords)} mean`],
-    ["Median Words", fmtInt.format(s.medianWords), "Text before opinions"],
-    ["Pages", fmtInt.format(s.pages), `${fmtOne.format(s.meanPages)} mean pages`],
-    ["Manual Rate", `${fmtPct.format(manualRate)}%`, `${fmtInt.format(s.manual)} manual`],
+    ["Documents", fmtInt.format(s.docs), "Current filter"],
+    ["Total Pages", fmtInt.format(s.pages), "Document page count"],
+    ["Mean Pages", fmtOne.format(s.meanPages), "Per document"],
+    ["Median Pages", fmtOne.format(s.medianPages), "Per document"],
+    ["Service Opinions", fmtInt.format(s.serviceOpinions), "Positive service sections"],
     ["Quality Flags", `${fmtPct.format(qualityRate)}%`, `${fmtInt.format(s.quality)} rows`],
   ];
   $("kpiGrid").innerHTML = kpis
@@ -692,11 +996,11 @@ function renderScatterChart() {
 function monthlyGroups(rows) {
   const map = new Map();
   rows
-    .filter((row) => row["Validation Month"])
+    .filter((row) => timelineMonth(row))
     .forEach((row) => {
-      const key = `${row["Validation Month"]}|${row["Template Type"]}`;
+      const key = `${timelineMonth(row)}|${row["Template Type"]}`;
       if (!map.has(key)) {
-        map.set(key, { month: row["Validation Month"], template: row["Template Type"], rows: [] });
+        map.set(key, { month: timelineMonth(row), template: row["Template Type"], rows: [] });
       }
       map.get(key).rows.push(row);
     });
@@ -705,6 +1009,8 @@ function monthlyGroups(rows) {
       ...item,
       documents: item.rows.length,
       meanWords: mean(item.rows.map((row) => row["Text Before Opinions"])),
+      meanPages: mean(item.rows.map((row) => row["Document Page Count"])),
+      meanTextBeforeOpinions: mean(item.rows.map((row) => row["Text Before Opinions"])),
       words: item.rows.reduce((sum, row) => sum + n(row["Text Before Opinions"]), 0),
     }))
     .sort((a, b) => a.month.localeCompare(b.month));
@@ -713,14 +1019,14 @@ function monthlyGroups(rows) {
 function serviceOpinionRows(rows) {
   const out = [];
   rows.forEach((row) => {
-    if (!row["Validation Month"]) return;
+    if (!timelineMonth(row)) return;
     DEPARTMENTS.forEach((service) => {
       const words = n(row[service]);
-      if (words > 0) {
+      if (opinionPassesFloor(words)) {
         out.push({
           template: row["Template Type"],
           service,
-          month: row["Validation Month"],
+          month: timelineMonth(row),
           words,
           file: row["File Name"],
           extraction: row.Extraction,
@@ -737,16 +1043,16 @@ function serviceOpinionSummary(rows) {
   const historicalMonths = Array.from(
     new Set(
       rows
-        .filter((row) => row["Validation Month"] && !row["Is Future Date"])
-      .map((row) => row["Validation Month"])
+        .filter((row) => timelineMonth(row) && !row["Is Future Date"])
+      .map(timelineMonth)
     )
   ).sort();
   const templateMonthDocs = new Map();
   rows
-    .filter((row) => row["Validation Month"] && !row["Is Future Date"])
+    .filter((row) => timelineMonth(row) && !row["Is Future Date"])
     .forEach((row) => {
       const template = row["Template Type"];
-      const month = row["Validation Month"];
+      const month = timelineMonth(row);
       if (!templateMonthDocs.has(template)) templateMonthDocs.set(template, new Map());
       const monthMap = templateMonthDocs.get(template);
       monthMap.set(month, (monthMap.get(month) || 0) + 1);
@@ -859,12 +1165,200 @@ function renderTimeVolumeChart() {
   });
 }
 
+function renderOverviewPageTrendChart() {
+  const data = monthlyGroups(state.filtered);
+  const metric = trendMetricConfig(state.overviewTrendMetric);
+  renderLineChart($("overviewPageTrendChart"), data, {
+    value: metric.value,
+    label: metric.axisLabel,
+    movingAverage: true,
+    tip: (d) => `${d.month} ${d.template}<br>${metric.format(metric.value(d))} ${metric.tipLabel}<br>${fmtInt.format(d.documents)} documents`,
+  });
+}
+
+function trendMetricConfig(metric) {
+  if (metric === "Text Before Opinions") {
+    return {
+      value: (d) => d.meanTextBeforeOpinions,
+      axisLabel: "Mean Text Before Opinions",
+      tipLabel: "mean text-before-opinions words",
+      format: (value) => fmtInt.format(value),
+    };
+  }
+  return {
+    value: (d) => d.meanPages,
+    axisLabel: "Mean Pages",
+    tipLabel: "mean pages",
+    format: (value) => fmtOne.format(value),
+  };
+}
+
 function renderServicesView() {
-  renderServicePulse();
   renderServiceMomentumChart();
-  renderServiceMixChart();
-  renderTemplateServiceChart();
+  renderServiceVolumeLengthChart();
   renderServiceTable();
+  renderBoTeamExtremesTable();
+}
+
+const BO_SERVICE_TEAM_COLUMNS = [
+  ["PJ", "BO PJ"],
+  ["RM", "BO RM"],
+  ["JU", "BO JU"],
+  ["ECON", "BO ECON"],
+];
+
+function renderBoView() {
+  renderBoValidationChart();
+  renderProductMixChart();
+  renderBoTeamTable();
+  renderProductTable();
+}
+
+function boDateBucket(row) {
+  if (!row["BO Validation Date"]) return "Missing BO date";
+  const delta = Number(row["BO Validation Delta Days"]);
+  if (!Number.isFinite(delta)) return "No MC date";
+  if (delta === 0) return "Same day";
+  if (delta < 0) return "BO before MC";
+  return "BO after MC";
+}
+
+function renderBoValidationChart() {
+  const order = ["Same day", "BO before MC", "BO after MC", "Missing BO date", "No MC date"];
+  const grouped = groupBy(state.filtered, boDateBucket);
+  const rows = order
+    .map((bucket) => ({ bucket, count: (grouped.get(bucket) || []).length }))
+    .filter((row) => row.count > 0);
+  renderVerticalBars($("boValidationChart"), rows, {
+    label: (d) => d.bucket,
+    value: (d) => d.count,
+    color: (_, i) => ["#00856f", "#376996", "#b38b00", "#b0444f", "#607080"][i % 5],
+    tip: (d) => `${d.bucket}<br>${fmtInt.format(d.count)} records`,
+  });
+}
+
+function productStats(rows) {
+  return Array.from(groupBy(rows, (row) => row["Financing Product Name"] || "Missing product").entries())
+    .map(([product, items]) => ({
+      product,
+      docs: items.length,
+      templates: Array.from(new Set(items.map((row) => row["Template Type"]))).sort().join(", "),
+      medianWords: quantile(items.map((row) => row["Text Before Opinions"]), 0.5),
+      meanWords: mean(items.map((row) => row["Text Before Opinions"])),
+      medianPages: quantile(items.map((row) => row["Document Page Count"]), 0.5),
+      opinionCount: serviceOpinionRows(items).length,
+      boDateCoverage: items.length ? (items.filter((row) => row["BO Validation Date"]).length / items.length) * 100 : 0,
+    }))
+    .sort((a, b) => b.docs - a.docs);
+}
+
+function renderProductMixChart() {
+  const rows = productStats(state.filtered).slice(0, 12);
+  renderHorizontalBars($("productMixChart"), rows, {
+    label: (d) => d.product,
+    value: (d) => d.docs,
+    color: (_, i) => ["#003399", "#00856f", "#b38b00", "#6d5aa8", "#2a7f9e", "#b0444f"][i % 6],
+    tip: (d) =>
+      `${d.product}<br>${fmtInt.format(d.docs)} docs<br>${fmtInt.format(d.medianWords)} median words<br>${fmtPct.format(d.boDateCoverage)}% with BO date`,
+  });
+}
+
+function boTeamOpinionRows(rows) {
+  const out = [];
+  rows.forEach((row) => {
+    BO_SERVICE_TEAM_COLUMNS.forEach(([service, teamCol]) => {
+      const words = n(row[service]);
+      const team = String(row[teamCol] || "").trim();
+      if (opinionPassesFloor(words) && team && !["#", "N/A", "NA", "NONE"].includes(team.toUpperCase())) {
+        out.push({
+          service,
+          team,
+          words,
+          file: row["File Name"],
+          template: row["Template Type"],
+          product: row["Financing Product Name"] || "Missing product",
+          validationDate: row["Validation Date"],
+          boValidationDate: row["BO Validation Date"],
+        });
+      }
+    });
+  });
+  return out;
+}
+
+function boTeamStats(rows) {
+  return Array.from(groupBy(boTeamOpinionRows(rows), (item) => `${item.service}|${item.team}`).entries())
+    .map(([key, items]) => {
+      const [service, team] = key.split("|");
+      return {
+        service,
+        team,
+        opinions: items.length,
+        documents: new Set(items.map((item) => item.file)).size,
+        totalWords: items.reduce((sum, item) => sum + item.words, 0),
+        meanWords: mean(items.map((item) => item.words)),
+        medianWords: quantile(items.map((item) => item.words), 0.5),
+        topProduct: topCategory(items.map((item) => item.product)),
+        templates: Array.from(new Set(items.map((item) => item.template))).sort().join(", "),
+      };
+    })
+    .sort((a, b) => b.opinions - a.opinions || b.medianWords - a.medianWords);
+}
+
+function topCategory(values) {
+  const counts = Array.from(groupBy(values.filter(Boolean), (value) => value).entries()).map(([value, items]) => ({
+    value,
+    count: items.length,
+  }));
+  counts.sort((a, b) => b.count - a.count || String(a.value).localeCompare(String(b.value)));
+  return counts[0]?.value || "";
+}
+
+function renderBoTeamExtremesTable() {
+  const rows = [];
+  BO_SERVICE_TEAM_COLUMNS.forEach(([service]) => {
+    const groups = boTeamStats(serviceAnalysisRecords()).filter((row) => row.service === service && row.opinions >= 3);
+    if (!groups.length) return;
+    const highest = [...groups].sort((a, b) => b.medianWords - a.medianWords || b.opinions - a.opinions)[0];
+    const lowest = [...groups].sort((a, b) => a.medianWords - b.medianWords || b.opinions - a.opinions)[0];
+    rows.push({ service, highest, lowest });
+  });
+  renderTable($("boTeamExtremesTable"), ["Service", "Highest Team", "Median", "Opinions", "Lowest Team", "Median", "Opinions"], rows, (row) => [
+    `<span class="pill">${escapeHtml(row.service)}</span>`,
+    escapeHtml(row.highest.team),
+    numCell(row.highest.medianWords),
+    numCell(row.highest.opinions),
+    escapeHtml(row.lowest.team),
+    numCell(row.lowest.medianWords),
+    numCell(row.lowest.opinions),
+  ]);
+}
+
+function renderBoTeamTable() {
+  const rows = boTeamStats(state.filtered).slice(0, 160);
+  renderTable($("boTeamTable"), ["Service", "BO Team", "Opinions", "Docs", "Median Words", "Mean Words", "Top Product"], rows, (row) => [
+    `<span class="pill">${escapeHtml(row.service)}</span>`,
+    escapeHtml(row.team),
+    numCell(row.opinions),
+    numCell(row.documents),
+    numCell(row.medianWords),
+    numCell(row.meanWords),
+    escapeHtml(shortLabel(row.topProduct, 54)),
+  ]);
+}
+
+function renderProductTable() {
+  const rows = productStats(state.filtered).slice(0, 180);
+  renderTable($("productTable"), ["Product", "Templates", "Docs", "Median Words", "Mean Words", "Median Pages", "Opinions", "BO Date Coverage"], rows, (row) => [
+    escapeHtml(shortLabel(row.product, 68)),
+    escapeHtml(row.templates),
+    numCell(row.docs),
+    numCell(row.medianWords),
+    numCell(row.meanWords),
+    numCell(row.medianPages),
+    numCell(row.opinionCount),
+    `${fmtPct.format(row.boDateCoverage)}%`,
+  ]);
 }
 
 function authorStats(rows) {
@@ -887,22 +1381,21 @@ function authorStats(rows) {
 
 function renderAuthorsView() {
   const stats = authorStats(state.filtered);
-  const longest = [...stats].sort((a, b) => b.medianWords - a.medianWords).slice(0, 18);
+  const longest = [...stats].sort((a, b) => b.medianWords - a.medianWords).slice(0, 12);
   const shortest = [...stats].sort((a, b) => a.medianWords - b.medianWords).slice(0, 12);
   renderHorizontalBars($("authorLengthChart"), longest, {
     label: (d) => d.author,
     value: (d) => d.medianWords,
     color: (d) => templateColor(d.templates.split(", ")[0]),
     tip: (d) =>
-      `${d.author}<br>${fmtInt.format(d.docs)} docs<br>${fmtInt.format(d.medianWords)} median words<br>${fmtInt.format(d.medianPages)} median pages`,
+      `${d.author}<br>${fmtInt.format(d.docs)} docs<br>${fmtInt.format(d.medianWords)} median Text Before Opinions<br>${fmtInt.format(d.medianPages)} median pages`,
   });
   renderHorizontalBars($("shortAuthorChart"), shortest, {
     label: (d) => d.author,
     value: (d) => d.medianWords,
     color: () => "#9d9d9c",
-    tip: (d) => `${d.author}<br>${fmtInt.format(d.docs)} docs<br>${fmtInt.format(d.medianWords)} median words`,
+    tip: (d) => `${d.author}<br>${fmtInt.format(d.docs)} docs<br>${fmtInt.format(d.medianWords)} median Text Before Opinions`,
   });
-  renderAuthorCoverage();
   renderAuthorTable(stats);
 }
 
@@ -923,7 +1416,7 @@ function renderAuthorCoverage() {
 
 function renderAuthorTable(stats) {
   const rows = [...stats].sort((a, b) => b.medianWords - a.medianWords);
-  renderTable($("authorTable"), ["Author", "Templates", "Docs", "Median Words", "Mean Words", "Median Pages", "Median Services", "Manual Rate"], rows, (row) => [
+  renderTable($("authorTable"), ["Author", "Templates", "Docs", "Median TBO", "Mean TBO", "Median Pages", "Median Services", "Manual Rate"], rows, (row) => [
     escapeHtml(row.author),
     escapeHtml(row.templates),
     numCell(row.docs),
@@ -984,42 +1477,123 @@ function renderServicePulse() {
     y += services.length * rowH + templateGap;
   });
 
-  html += `<text x="${margin.left}" y="${height - 24}" fill="${COLORS.neutral}" font-size="12">Definition: a service opinion is counted when a service column has a positive word count in a document.</text>`;
+  html += `<text x="${margin.left}" y="${height - 24}" fill="${COLORS.neutral}" font-size="12">Definition: a service opinion is counted when a service column is above the active word floor.</text>`;
   svg.innerHTML = html;
   bindSvgTips(svg);
 }
 
 function renderServiceMomentumChart() {
   const metric = state.serviceMomentumMetric;
-  const rows = serviceOpinionSummary(state.filtered)
+  const rows = serviceOpinionSummary(serviceAnalysisRecords())
     .filter((row) => row.opinionCount > 0)
-    .sort((a, b) => Math.abs(serviceMomentumValue(b, metric)) - Math.abs(serviceMomentumValue(a, metric)))
-    .slice(0, 18);
-  if (!rows.length) return empty($("serviceMomentumChart"));
-  renderDivergingBars($("serviceMomentumChart"), rows, {
-    label: (d) => `${d.template} ${d.service}`,
-    value: (d) => serviceMomentumValue(d, metric),
-    valueFormat: (value) => serviceMomentumLabel(value, metric),
-    tip: (d) =>
-      `${d.template} / ${d.service}<br>Coverage delta: ${d.momentum > 0 ? "+" : ""}${fmtPct.format(d.momentum)} pp<br>Mean words/opinion delta: ${d.meanWordDelta > 0 ? "+" : ""}${fmtInt.format(d.meanWordDelta)}<br>Median words/opinion delta: ${d.medianWordDelta > 0 ? "+" : ""}${fmtInt.format(d.medianWordDelta)}<br>Total word-count delta: ${d.wordDelta > 0 ? "+" : ""}${fmtInt.format(d.wordDelta)} words<br>Opinion-count delta: ${d.countDelta > 0 ? "+" : ""}${fmtInt.format(d.countDelta)} opinions<br>Recent: ${fmtPct.format(d.recentCoverage)}%, ${fmtInt.format(d.recentOpinions)} opinions, mean ${fmtInt.format(d.recentMeanWords)}, median ${fmtInt.format(d.recentMedianWords)}, total ${fmtInt.format(d.recentWords)} words<br>Previous: ${fmtPct.format(d.previousCoverage)}%, ${fmtInt.format(d.previousOpinions)} opinions, mean ${fmtInt.format(d.previousMeanWords)}, median ${fmtInt.format(d.previousMedianWords)}, total ${fmtInt.format(d.previousWords)} words`,
+    .sort((a, b) => templateSort(a.template, b.template) || Math.abs(serviceMomentumValue(b, metric)) - Math.abs(serviceMomentumValue(a, metric)));
+  const container = $("serviceMomentumChart");
+  if (!rows.length) return empty(container);
+  const groups = [
+    { label: "AFS / GNG", templates: ["AFS", "GNG"] },
+    { label: "OTHER", templates: ["OTHER"] },
+  ].filter((group) => rows.some((row) => group.templates.includes(row.template)));
+  const max = Math.max(...rows.map((row) => Math.abs(serviceMomentumValue(row, metric))), 1);
+  container.innerHTML = groups
+    .map((group, index) => `
+      <section class="momentum-template">
+        <div class="momentum-template-title">
+          <span>${escapeHtml(group.label)}</span>
+          <small>${escapeHtml(serviceMomentumAxisLabel(metric))}</small>
+        </div>
+        <div id="serviceMomentumGroup${index}" class="chart compact-momentum"></div>
+      </section>`)
+    .join("");
+  groups.forEach((group, index) => {
+    const groupRows = rows
+      .filter((row) => group.templates.includes(row.template))
+      .sort((a, b) => templateSort(a.template, b.template) || Math.abs(serviceMomentumValue(b, metric)) - Math.abs(serviceMomentumValue(a, metric)))
+      .slice(0, 18);
+    if (group.templates.length > 1) {
+      renderPairedTemplateMomentum($(`serviceMomentumGroup${index}`), groupRows, group.templates, metric, max);
+    } else {
+      renderDivergingBars($(`serviceMomentumGroup${index}`), groupRows, {
+        label: (d) => d.service,
+        value: (d) => serviceMomentumValue(d, metric),
+        valueFormat: (value) => serviceMomentumLabel(value, metric),
+        max,
+        color: (d) => templateColor(d.template),
+        tip: (d) =>
+          `${d.template} / ${d.service}<br>Mean words/opinion delta: ${d.meanWordDelta > 0 ? "+" : ""}${fmtInt.format(d.meanWordDelta)}<br>Median words/opinion delta: ${d.medianWordDelta > 0 ? "+" : ""}${fmtInt.format(d.medianWordDelta)}<br>Recent: ${fmtInt.format(d.recentOpinions)} opinions, mean ${fmtInt.format(d.recentMeanWords)}, median ${fmtInt.format(d.recentMedianWords)}<br>Previous: ${fmtInt.format(d.previousOpinions)} opinions, mean ${fmtInt.format(d.previousMeanWords)}, median ${fmtInt.format(d.previousMedianWords)}`,
+      });
+    }
   });
+}
+
+function renderPairedTemplateMomentum(container, rows, templates, metric, max) {
+  const services = Array.from(new Set(rows.map((row) => row.service)))
+    .sort((a, b) => {
+      const aMax = Math.max(...rows.filter((row) => row.service === a).map((row) => Math.abs(serviceMomentumValue(row, metric))));
+      const bMax = Math.max(...rows.filter((row) => row.service === b).map((row) => Math.abs(serviceMomentumValue(row, metric))));
+      return bMax - aMax || DEPARTMENTS.indexOf(a) - DEPARTMENTS.indexOf(b);
+    });
+  if (!services.length) return empty(container);
+  const groupH = 50;
+  const height = Math.max(300, 64 + services.length * groupH);
+  const svg = makeSvg(container, 920, height);
+  const margin = { top: 38, right: 84, bottom: 34, left: 172 };
+  const width = 920 - margin.left - margin.right;
+  const center = margin.left + width / 2;
+  let html = `<line x1="${center}" x2="${center}" y1="${margin.top - 10}" y2="${height - margin.bottom}" stroke="${COLORS.grid}" stroke-width="2"></line>`;
+  html += templates
+    .map((template, i) => `<g>
+      <rect x="${margin.left + i * 76}" y="12" width="12" height="12" rx="2" fill="${templateColor(template)}"></rect>
+      <text x="${margin.left + 18 + i * 76}" y="23" fill="${COLORS.ink}" font-size="12" font-weight="750">${template}</text>
+    </g>`)
+    .join("");
+  services.forEach((service, si) => {
+    const y = margin.top + si * groupH;
+    html += `<text x="72" y="${y + 28}" text-anchor="end" fill="${COLORS.ink}" font-size="13" font-weight="850">${escapeHtml(service)}</text>`;
+    templates.forEach((template, ti) => {
+      const row = rows.find((item) => item.service === service && item.template === template);
+      const value = row ? serviceMomentumValue(row, metric) : 0;
+      const barW = (Math.abs(value) / max) * (width / 2);
+      const x = value >= 0 ? center : center - barW;
+      const rowY = y + 5 + ti * 20;
+      const labelX = margin.left - 12;
+      const valueX = value >= 0 ? x + barW + 6 : x - 6;
+      const anchor = value >= 0 ? "start" : "end";
+      const tip = row
+        ? `${template} / ${service}<br>Mean words/opinion delta: ${row.meanWordDelta > 0 ? "+" : ""}${fmtInt.format(row.meanWordDelta)}<br>Median words/opinion delta: ${row.medianWordDelta > 0 ? "+" : ""}${fmtInt.format(row.medianWordDelta)}<br>Recent: ${fmtInt.format(row.recentOpinions)} opinions, mean ${fmtInt.format(row.recentMeanWords)}, median ${fmtInt.format(row.recentMedianWords)}<br>Previous: ${fmtInt.format(row.previousOpinions)} opinions, mean ${fmtInt.format(row.previousMeanWords)}, median ${fmtInt.format(row.previousMedianWords)}`
+        : `${template} / ${service}<br>No opinions in comparison window`;
+      html += `<g data-tip="${escapeAttr(tip)}">
+        <text x="${labelX}" y="${rowY + 12}" text-anchor="end" fill="${templateColor(template)}" font-size="11" font-weight="800">${template}</text>
+        <rect x="${x}" y="${rowY + 2}" width="${Math.max(2, barW)}" height="12" rx="4" fill="${templateColor(template)}" opacity="${row ? 0.9 : 0.22}"></rect>
+        <text x="${valueX}" y="${rowY + 13}" text-anchor="${anchor}" fill="${COLORS.neutral}" font-size="11">${serviceMomentumLabel(value, metric)}</text>
+      </g>`;
+    });
+  });
+  svg.innerHTML = html;
+  bindSvgTips(svg);
 }
 
 function serviceMomentumValue(row, metric) {
   if (metric === "meanWords") return row.meanWordDelta;
   if (metric === "medianWords") return row.medianWordDelta;
-  if (metric === "totalWords") return row.wordDelta;
-  if (metric === "opinions") return row.countDelta;
-  return row.momentum;
+  return row.meanWordDelta;
 }
 
 function serviceMomentumLabel(value, metric) {
-  if (metric === "coverage") return `${value > 0 ? "+" : ""}${fmtOne.format(value)} pp`;
-  if (["meanWords", "medianWords", "totalWords"].includes(metric)) return `${value > 0 ? "+" : ""}${fmtInt.format(value)}`;
   return `${value > 0 ? "+" : ""}${fmtInt.format(value)}`;
 }
 
-function renderServiceMixChart() {
+function serviceMomentumAxisLabel(metric) {
+  return metric === "medianWords" ? "Median delta" : "Mean delta";
+}
+
+function templateSort(a, b) {
+  const order = ["AFS", "GNG", "OTHER", "PIN"];
+  const ai = order.includes(a) ? order.indexOf(a) : order.length;
+  const bi = order.includes(b) ? order.indexOf(b) : order.length;
+  return ai - bi || String(a).localeCompare(String(b));
+}
+
+function renderServiceMixChart(containerId = "serviceMixChart") {
   const rows = Array.from(groupBy(serviceOpinionRows(state.filtered), (d) => d.service).entries())
     .map(([service, items]) => ({
       service,
@@ -1028,7 +1602,7 @@ function renderServiceMixChart() {
     }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 10);
-  renderVerticalBars($("serviceMixChart"), rows, {
+  renderVerticalBars($(containerId), rows, {
     label: (d) => d.service,
     value: (d) => d.count,
     color: (_, i) => ["#003399", "#1856b6", "#00856f", "#b0444f", "#b38b00", "#6d5aa8"][i % 6],
@@ -1053,41 +1627,887 @@ function renderTemplateServiceChart() {
 }
 
 function renderServiceTable() {
-  const rows = serviceOpinionSummary(state.filtered)
+  const rows = serviceOpinionSummary(serviceAnalysisRecords())
     .filter((row) => row.opinionCount > 0)
-    .sort((a, b) => b.opinionCount - a.opinionCount);
-  renderTable($("serviceTable"), ["Template", "Service", "Opinions", "Docs", "Mean Now", "Mean Prev", "Median Now", "Median Prev", "Mean Delta"], rows, (row) => [
-    `<span class="pill">${escapeHtml(row.template)}</span>`,
-    escapeHtml(row.service),
-    numCell(row.opinionCount),
-    numCell(row.documentCount),
-    numCell(row.recentMeanWords),
-    numCell(row.previousMeanWords),
-    numCell(row.recentMedianWords),
-    numCell(row.previousMedianWords),
-    `<span class="pill ${row.meanWordDelta >= 0 ? "auto" : "manual"}">${row.meanWordDelta > 0 ? "+" : ""}${fmtInt.format(row.meanWordDelta)}</span>`,
-  ]);
+    .sort((a, b) => templateSort(a.template, b.template) || b.opinionCount - a.opinionCount);
+  renderGroupedServiceTable(rows);
 }
 
-function renderTimeWordsChart() {
-  const data = monthlyGroups(state.filtered);
-  renderLineChart($("timeWordsChart"), data, {
-    value: (d) => d.meanWords,
-    label: "Mean Words",
+function renderServiceVolumeLengthChart() {
+  const opinions = serviceOpinionRows(serviceAnalysisRecords());
+  const rows = Array.from(groupBy(opinions, (item) => item.service).entries())
+    .map(([service, items]) => ({
+      service,
+      count: items.length,
+      meanWords: mean(items.map((item) => item.words)),
+      medianWords: quantile(items.map((item) => item.words), 0.5),
+    }))
+    .filter((row) => row.count > 0)
+    .sort((a, b) => b.count - a.count || b.medianWords - a.medianWords)
+    .slice(0, 14);
+  renderServiceComboChart($("serviceVolumeLengthChart"), rows);
+}
+
+function renderServiceComboChart(container, rows) {
+  if (!rows.length) return empty(container, "No service opinions match the current filters.");
+  const svg = makeSvg(container, 980, Math.max(420, 104 + rows.length * 30));
+  const margin = { top: 58, right: 34, bottom: 54, left: 82 };
+  const chartWidth = 980 - margin.left - margin.right;
+  const countW = Math.min(520, chartWidth * 0.62);
+  const gap = 64;
+  const lengthX0 = margin.left + countW + gap;
+  const lengthW = chartWidth - countW - gap;
+  const rowH = 30;
+  const height = rows.length * rowH;
+  const countMax = Math.max(...rows.map((row) => row.count), 1);
+  const lengthMax = Math.max(...rows.flatMap((row) => [row.meanWords, row.medianWords]), 1);
+  const countMaxRounded = Math.ceil(countMax / 500) * 500 || countMax;
+  const lengthMaxRounded = Math.ceil(lengthMax / 250) * 250 || lengthMax;
+  const barW = (value) => (value / countMaxRounded) * countW;
+  const lengthX = (value) => lengthX0 + (value / lengthMaxRounded) * lengthW;
+  const countTicks = [0, 0.25, 0.5, 0.75, 1].map((ratio) => countMaxRounded * ratio);
+  const lengthTicks = [0, 0.5, 1].map((ratio) => lengthMaxRounded * ratio);
+
+  let html = `<text x="${margin.left}" y="20" fill="${COLORS.ink}" font-size="13" font-weight="850">Opinion rows</text>
+    <text x="${lengthX0}" y="20" fill="${COLORS.ink}" font-size="13" font-weight="850">Words per opinion</text>
+    <rect x="${margin.left}" y="32" width="14" height="10" rx="3" fill="#376996" opacity="0.45"></rect>
+    <text x="${margin.left + 20}" y="42" fill="${COLORS.neutral}" font-size="11" font-weight="750">Count</text>
+    <circle cx="${lengthX0}" cy="38" r="4.5" fill="#17212b"></circle>
+    <text x="${lengthX0 + 11}" y="42" fill="${COLORS.neutral}" font-size="11" font-weight="750">Mean</text>
+    <circle cx="${lengthX0 + 74}" cy="38" r="4.5" fill="#ffffff" stroke="#17212b" stroke-width="2"></circle>
+    <text x="${lengthX0 + 85}" y="42" fill="${COLORS.neutral}" font-size="11" font-weight="750">Median</text>`;
+
+  html += countTicks
+    .map((value) => {
+      const x = margin.left + (value / countMaxRounded) * countW;
+      return `<line class="grid-line" x1="${x}" x2="${x}" y1="${margin.top - 6}" y2="${margin.top + height - 4}"></line>
+        <text x="${x}" y="${margin.top + height + 18}" text-anchor="middle" fill="${COLORS.neutral}" font-size="10">${fmtInt.format(value)}</text>`;
+    })
+    .join("");
+  html += lengthTicks
+    .map((value) => {
+      const x = lengthX(value);
+      return `<line class="grid-line" x1="${x}" x2="${x}" y1="${margin.top - 6}" y2="${margin.top + height - 4}"></line>
+        <text x="${x}" y="${margin.top + height + 18}" text-anchor="middle" fill="${COLORS.neutral}" font-size="10">${fmtInt.format(value)}</text>`;
+    })
+    .join("");
+
+  rows.forEach((row, index) => {
+    const y = margin.top + index * rowH;
+    const barWidth = barW(row.count);
+    html += `<g data-tip="${escapeAttr(
+      `${row.service}<br>${fmtInt.format(row.count)} opinion rows<br>${fmtInt.format(row.meanWords)} mean words<br>${fmtInt.format(row.medianWords)} median words`
+    )}">
+      <rect x="${margin.left - 74}" y="${y - 1}" width="${chartWidth + 74}" height="${rowH - 4}" rx="6" fill="${index % 2 ? "#ffffff" : "#f7fafc"}"></rect>
+      <text x="${margin.left - 12}" y="${y + 18}" text-anchor="end" fill="${COLORS.ink}" font-size="12" font-weight="850">${escapeHtml(row.service)}</text>
+      <rect x="${margin.left}" y="${y + 6}" width="${Math.max(2, barWidth)}" height="14" rx="5" fill="#376996" opacity="0.42"></rect>
+      <rect x="${margin.left}" y="${y + 6}" width="${Math.max(2, Math.min(barWidth, 3))}" height="14" rx="2" fill="#376996"></rect>
+      <text x="${margin.left + barWidth + 7}" y="${y + 18}" fill="${COLORS.neutral}" font-size="11" font-weight="750">${fmtInt.format(row.count)}</text>
+      <line x1="${lengthX(row.medianWords)}" x2="${lengthX(row.meanWords)}" y1="${y + 13}" y2="${y + 13}" stroke="#aeb8c4" stroke-width="2" stroke-linecap="round"></line>
+      <circle cx="${lengthX(row.meanWords)}" cy="${y + 13}" r="5" fill="#17212b"></circle>
+      <circle cx="${lengthX(row.medianWords)}" cy="${y + 13}" r="5" fill="#ffffff" stroke="#17212b" stroke-width="2"></circle>
+    </g>`;
+  });
+  html += `<text x="${margin.left + countW / 2}" y="${margin.top + height + 40}" text-anchor="middle" fill="${COLORS.neutral}" font-size="11">Opinion rows</text>
+    <text x="${lengthX0 + lengthW / 2}" y="${margin.top + height + 40}" text-anchor="middle" fill="${COLORS.neutral}" font-size="11">Mean and median words</text>`;
+  svg.innerHTML = html;
+  bindSvgTips(svg);
+}
+
+function renderGroupedServiceTable(rows) {
+  const table = $("serviceTable");
+  const headers = ["Service", "Opinions", "Docs", "Mean Now", "Mean Prev", "Median Now", "Median Prev", "Mean Delta", "Median Delta"];
+  if (!rows.length) {
+    table.innerHTML = `<thead><tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody><tr><td colspan="${headers.length}">No records match the current filters.</td></tr></tbody>`;
+    return;
+  }
+  const groups = Array.from(groupBy(rows, (row) => row.template).entries()).sort((a, b) => templateSort(a[0], b[0]));
+  table.innerHTML = `<thead><tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${groups
+    .map(([template, items]) => {
+      const groupHeader = `<tr class="group-row"><td colspan="${headers.length}">${escapeHtml(template)}</td></tr>`;
+      const itemRows = items
+        .map((row) => `<tr>
+          <td>${escapeHtml(row.service)}</td>
+          <td>${numCell(row.opinionCount)}</td>
+          <td>${numCell(row.documentCount)}</td>
+          <td>${numCell(row.recentMeanWords)}</td>
+          <td>${numCell(row.previousMeanWords)}</td>
+          <td>${numCell(row.recentMedianWords)}</td>
+          <td>${numCell(row.previousMedianWords)}</td>
+          <td><span class="pill ${row.meanWordDelta >= 0 ? "auto" : "manual"}">${row.meanWordDelta > 0 ? "+" : ""}${fmtInt.format(row.meanWordDelta)}</span></td>
+          <td><span class="pill ${row.medianWordDelta >= 0 ? "auto" : "manual"}">${row.medianWordDelta > 0 ? "+" : ""}${fmtInt.format(row.medianWordDelta)}</span></td>
+        </tr>`)
+        .join("");
+      return groupHeader + itemRows;
+    })
+    .join("")}</tbody>`;
+}
+
+function serviceTrendSignal(row) {
+  const lengthDelta = Math.abs(row.medianWordDelta) >= Math.abs(row.meanWordDelta)
+    ? row.medianWordDelta
+    : row.meanWordDelta;
+  const frequencyDelta = row.countDelta;
+  if (lengthDelta >= 25 && frequencyDelta > 0) return "Longer and more frequent";
+  if (lengthDelta >= 25 && frequencyDelta <= 0) return "Longer but less frequent";
+  if (lengthDelta <= -25 && frequencyDelta > 0) return "Shorter but more frequent";
+  if (lengthDelta <= -25 && frequencyDelta <= 0) return "Shorter and less frequent";
+  if (frequencyDelta > 10) return "More frequent";
+  if (frequencyDelta < -10) return "Less frequent";
+  return "Stable length";
+}
+
+function renderServiceTrendSignalsTable() {
+  const rows = serviceOpinionSummary(serviceAnalysisRecords())
+    .filter((row) => row.opinionCount > 0)
+    .map((row) => ({
+      ...row,
+      signal: serviceTrendSignal(row),
+      score: Math.abs(row.meanWordDelta) + Math.abs(row.medianWordDelta) + Math.abs(row.countDelta) * 8,
+    }))
+    .sort((a, b) => templateSort(a.template, b.template) || b.score - a.score);
+  const topRows = [];
+  Array.from(groupBy(rows, (row) => row.template).entries())
+    .sort((a, b) => templateSort(a[0], b[0]))
+    .forEach(([, items]) => topRows.push(...items.slice(0, 8)));
+  renderTable(
+    $("serviceTrendSignalsTable"),
+    ["Template", "Service", "Signal", "Recent Ops", "Prior Ops", "Mean Delta", "Median Delta"],
+    topRows,
+    (row) => [
+      `<span class="pill">${escapeHtml(row.template)}</span>`,
+      escapeHtml(row.service),
+      escapeHtml(row.signal),
+      numCell(row.recentOpinions),
+      numCell(row.previousOpinions),
+      `<span class="pill ${row.meanWordDelta >= 0 ? "auto" : "manual"}">${row.meanWordDelta > 0 ? "+" : ""}${fmtInt.format(row.meanWordDelta)}</span>`,
+      `<span class="pill ${row.medianWordDelta >= 0 ? "auto" : "manual"}">${row.medianWordDelta > 0 ? "+" : ""}${fmtInt.format(row.medianWordDelta)}</span>`,
+    ]
+  );
+}
+
+function serviceAnalysisRecords() {
+  return state.filtered.filter((row) => row["Template Type"] !== "PIN");
+}
+
+function renderPagesView() {
+  renderPageTrendChart();
+  renderAnnexTemplateChart();
+  renderPageCompositionChart();
+  renderPageCompositionTimeChart();
+  renderPageSummaryTable();
+  renderAnnexOutlierTable();
+  renderAfsProcessPageChart();
+  renderAfsProcessPageTable();
+}
+
+function renderNoteTypesView() {
+  renderMcNoteTypeMonthChart();
+  renderInfoDiscussionOpinionChart();
+  renderMcNoteTypeTable();
+}
+
+function mcNoteTypeLabel(row) {
+  const value = String(row["MC_Note_Type"] || "").trim();
+  return value || "Missing type";
+}
+
+function isValidMcNoteType(row) {
+  return MC_NOTE_TYPES.includes(mcNoteTypeLabel(row));
+}
+
+function hasServiceOpinion(row) {
+  return DEPARTMENTS.some((service) => opinionPassesFloor(row[service]));
+}
+
+function mcNoteTypeMonthlyGroups(rows) {
+  const selectedTypes = MC_NOTE_TYPES.filter((type) => state.selectedMcMonthTypes.has(type));
+  const validRows = rows.filter((row) => selectedTypes.includes(mcNoteTypeLabel(row)));
+  const months = Array.from(new Set(validRows.map(timelineMonth).filter(Boolean))).sort();
+  const typeTotals = Array.from(groupBy(validRows, mcNoteTypeLabel).entries())
+    .map(([type, items]) => ({ type, documents: items.length }))
+    .sort((a, b) => MC_NOTE_TYPES.indexOf(a.type) - MC_NOTE_TYPES.indexOf(b.type));
+  const types = selectedTypes.filter((type) => typeTotals.some((item) => item.type === type));
+  const counts = new Map();
+  validRows
+    .filter((row) => timelineMonth(row))
+    .forEach((row) => {
+      const key = `${timelineMonth(row)}|${mcNoteTypeLabel(row)}`;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    });
+  return { months, types, counts, typeTotals };
+}
+
+function noteTypePercentStackMarkup(months, types, counts, options) {
+  const { top, height, margin, width, barW, label, unitLabel } = options;
+  let html = `<text x="${margin.left}" y="${top - 16}" fill="${COLORS.ink}" font-size="12" font-weight="850">${escapeHtml(label)}</text>`;
+  [0, 0.5, 1].forEach((ratio) => {
+    const y = top + height - ratio * height;
+    html += `<line class="grid-line" x1="${margin.left}" x2="${margin.left + width}" y1="${y}" y2="${y}"></line>
+      <text x="${margin.left - 10}" y="${y + 4}" text-anchor="end" fill="${COLORS.neutral}" font-size="10">${fmtInt.format(ratio * 100)}%</text>`;
+  });
+  const step = width / months.length;
+  months.forEach((month, monthIndex) => {
+    const total = types.reduce((sum, type) => sum + (counts.get(`${month}|${type}`) || 0), 0);
+    if (!total) return;
+    let runningPct = 0;
+    const x = margin.left + monthIndex * step + (step - barW) / 2;
+    types.forEach((type) => {
+      const value = counts.get(`${month}|${type}`) || 0;
+      if (!value) return;
+      const pct = value / total;
+      const y0 = top + height - (runningPct + pct) * height;
+      const y1 = top + height - runningPct * height;
+      html += `<rect x="${x}" y="${y0}" width="${barW}" height="${Math.max(1, y1 - y0)}" rx="2" fill="${categoryColor(
+        type,
+        MC_NOTE_TYPES.indexOf(type)
+      )}" data-tip="${escapeAttr(`${month}<br>${type}<br>${fmtPct.format(pct * 100)}% of selected types<br>${fmtInt.format(value)} of ${fmtInt.format(total)} ${unitLabel}`)}"></rect>`;
+      runningPct += pct;
+    });
+  });
+  return html;
+}
+
+function renderMcNoteTypeMonthChart() {
+  const container = $("mcNoteTypeMonthChart");
+  const { months, types, counts } = mcNoteTypeMonthlyGroups(state.filtered);
+  if (!state.selectedMcMonthTypes.size) return empty(container, "Select at least one MC note type.");
+  if (!months.length || !types.length) return empty(container, "No dated MC note type records match the current filters.");
+
+  const svgHeight = 660;
+  const svg = makeSvg(container, 980, svgHeight);
+  const margin = { top: 30, right: 34, bottom: 44, left: 70 };
+  const width = 980 - margin.left - margin.right;
+  const stackHeight = 250;
+  const maTop = 338;
+  const maHeight = 86;
+  const pctTop = 500;
+  const pctHeight = 72;
+  const step = width / months.length;
+  const barW = Math.max(5, Math.min(24, step * 0.72));
+  const monthTotals = months.map((month) => types.reduce((sum, type) => sum + (counts.get(`${month}|${type}`) || 0), 0));
+  const stackMax = Math.max(...monthTotals, 1);
+  const stackY = (value) => margin.top + stackHeight - (value / stackMax) * stackHeight;
+  const maSeries = types.map((type) => {
+    const points = months.map((month) => ({ month, value: counts.get(`${month}|${type}`) || 0 }));
+    return {
+      type,
+      points: points.map((point, index) => {
+        const window = points.slice(Math.max(0, index - 2), index + 1);
+        return { month: point.month, value: mean(window.map((item) => item.value)) };
+      }),
+    };
+  });
+  const maMax = Math.max(...maSeries.flatMap((series) => series.points.map((point) => point.value)), 1);
+  const maY = (value) => maTop + maHeight - (value / maMax) * maHeight;
+
+  let html = `<text x="${margin.left}" y="18" fill="${COLORS.neutral}" font-size="11" font-weight="800">Stacked columns: monthly documents. Lines below: 3-month moving averages.</text>`;
+  html += gridY(stackMax, margin, width, stackHeight, 5).join("");
+  months.forEach((month, monthIndex) => {
+    let running = 0;
+    const x = margin.left + monthIndex * step + (step - barW) / 2;
+    types.forEach((type, typeIndex) => {
+      const value = counts.get(`${month}|${type}`) || 0;
+      if (!value) return;
+      const y0 = stackY(running + value);
+      const y1 = stackY(running);
+      html += `<rect x="${x}" y="${y0}" width="${barW}" height="${Math.max(1, y1 - y0)}" rx="2" fill="${categoryColor(
+        type,
+        MC_NOTE_TYPES.indexOf(type)
+      )}" data-tip="${escapeAttr(`${month}<br>${type}<br>${fmtInt.format(value)} documents`)}"></rect>`;
+      running += value;
+    });
+  });
+  html += monthTicks(months, margin, width, stackHeight);
+  html += `<text x="${margin.left}" y="${maTop - 14}" fill="${COLORS.ink}" font-size="12" font-weight="850">3-month moving average</text>`;
+  html += [0, 0.5, 1]
+    .map((ratio) => {
+      const value = maMax * ratio;
+      const y = maY(value);
+      return `<line class="grid-line" x1="${margin.left}" x2="${margin.left + width}" y1="${y}" y2="${y}"></line>
+        <text x="${margin.left - 10}" y="${y + 4}" text-anchor="end" fill="${COLORS.neutral}" font-size="10">${fmtInt.format(value)}</text>`;
+    })
+    .join("");
+  maSeries.forEach((series, typeIndex) => {
+    const path = series.points
+      .map((point, index) => `${index === 0 ? "M" : "L"} ${margin.left + (months.indexOf(point.month) / Math.max(1, months.length - 1)) * width} ${maY(point.value)}`)
+      .join(" ");
+    html += `<path d="${path}" fill="none" stroke="${categoryColor(series.type, MC_NOTE_TYPES.indexOf(series.type))}" stroke-width="3.2" stroke-linecap="round"></path>`;
+  });
+  html += monthTicks(months, { ...margin, top: maTop }, width, maHeight);
+  html += noteTypePercentStackMarkup(months, types, counts, {
+    top: pctTop,
+    height: pctHeight,
+    margin,
+    width,
+    barW,
+    label: "100% monthly mix",
+    unitLabel: "documents",
+  });
+  html += monthTicks(months, { ...margin, top: pctTop }, width, pctHeight);
+  html += `<text x="${margin.left + width / 2}" y="${svgHeight - 14}" text-anchor="middle" fill="${COLORS.neutral}" font-size="12">BO validation month</text>`;
+  html += types
+    .map((type, index) => {
+      const x = margin.left + 520 + index * 120;
+      return `<g><rect x="${x}" y="${maTop - 24}" width="12" height="12" rx="2" fill="${categoryColor(type, MC_NOTE_TYPES.indexOf(type))}"></rect><text x="${x + 18}" y="${
+        maTop - 14
+      }" fill="${COLORS.ink}" font-size="11" font-weight="750">${escapeHtml(type)}</text></g>`;
+    })
+    .join("");
+  svg.innerHTML = html;
+  bindSvgTips(svg);
+}
+
+function mcNoteTypeOpinionGroups(rows) {
+  const types = MC_NOTE_TYPES.filter((type) => state.selectedMcOpinionTypes.has(type));
+  const months = Array.from(
+    new Set(rows.filter((row) => types.includes(mcNoteTypeLabel(row))).map(timelineMonth).filter(Boolean))
+  ).sort();
+  const counts = new Map();
+  rows
+    .filter((row) => timelineMonth(row) && types.includes(mcNoteTypeLabel(row)) && hasServiceOpinion(row))
+    .forEach((row) => {
+      const key = `${timelineMonth(row)}|${mcNoteTypeLabel(row)}`;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    });
+  return { months, types, counts };
+}
+
+function renderInfoDiscussionOpinionChart() {
+  const container = $("infoDiscussionOpinionChart");
+  const { months, types, counts } = mcNoteTypeOpinionGroups(state.filtered);
+  if (!types.length) return empty(container, "Select at least one MC note type.");
+  if (!months.length) return empty(container, "No dated MC note type records match the current filters.");
+
+  const svgHeight = 550;
+  const svg = makeSvg(container, 980, svgHeight);
+  const margin = { top: 28, right: 34, bottom: 78, left: 70 };
+  const width = 980 - margin.left - margin.right;
+  const height = 300;
+  const pctTop = 390;
+  const pctHeight = 72;
+  const monthTotals = months.map((month) => types.reduce((sum, type) => sum + (counts.get(`${month}|${type}`) || 0), 0));
+  const max = Math.max(...monthTotals, 1);
+  const step = width / months.length;
+  const barW = Math.max(5, Math.min(24, step * 0.72));
+  const y = (value) => margin.top + height - (value / max) * height;
+
+  let html = gridY(max, margin, width, height, 5).join("");
+  months.forEach((month, monthIndex) => {
+    let running = 0;
+    const x = margin.left + monthIndex * step + (step - barW) / 2;
+    types.forEach((type, typeIndex) => {
+      const value = counts.get(`${month}|${type}`) || 0;
+      if (!value) return;
+      const colorIndex = MC_NOTE_TYPES.indexOf(type);
+      const y0 = y(running + value);
+      const y1 = y(running);
+      html += `<rect x="${x}" y="${y0}" width="${barW}" height="${Math.max(1, y1 - y0)}" rx="2" fill="${categoryColor(
+        type,
+        colorIndex
+      )}" data-tip="${escapeAttr(`${month}<br>${type}<br>${fmtInt.format(value)} documents with service opinions<br>${opinionFloorText()}`)}"></rect>`;
+      running += value;
+    });
+  });
+  html += monthTicks(months, margin, width, height);
+  html += noteTypePercentStackMarkup(months, types, counts, {
+    top: pctTop,
+    height: pctHeight,
+    margin,
+    width,
+    barW,
+    label: "100% monthly mix",
+    unitLabel: "documents with service opinions",
+  });
+  html += monthTicks(months, { ...margin, top: pctTop }, width, pctHeight);
+  html += `<text x="${margin.left + width / 2}" y="${svgHeight - 30}" text-anchor="middle" fill="${COLORS.neutral}" font-size="12">BO validation month</text>`;
+  html += types
+    .map((type, index) => {
+      const x = margin.left + index * 148;
+      return `<g><rect x="${x}" y="${svgHeight - 18}" width="12" height="12" rx="2" fill="${categoryColor(type, MC_NOTE_TYPES.indexOf(type))}"></rect><text x="${
+        x + 18
+      }" y="${svgHeight - 8}" fill="${COLORS.ink}" font-size="11" font-weight="750">${escapeHtml(type)}</text></g>`;
+    })
+    .join("");
+  svg.innerHTML = html;
+  bindSvgTips(svg);
+}
+
+function renderMcNoteTypeTable() {
+  const rows = Array.from(groupBy(state.filtered.filter(isValidMcNoteType), mcNoteTypeLabel).entries())
+    .map(([type, items]) => {
+      const dates = items.map(timelineDate).filter(Boolean).sort();
+      const opinionDocs = items.filter(hasServiceOpinion).length;
+      const serviceCounts = items.map((row) => DEPARTMENTS.filter((service) => opinionPassesFloor(row[service])).length);
+      const meanPages = mean(items.map((row) => row["Document Page Count"]));
+      const meanPreOpinionPages = mean(items.map((row) => row["Page count before opinion"]));
+      const meanAnnexPages = mean(items.map((row) => row["Annex Page Count"]));
+      return {
+        type,
+        documents: items.length,
+        opinionDocs,
+        opinionDocShare: items.length ? (opinionDocs / items.length) * 100 : 0,
+        medianPages: quantile(items.map((row) => row["Document Page Count"]), 0.5),
+        meanPages,
+        meanPreOpinionPages,
+        meanOpinionPages: Math.max(0, meanPages - meanPreOpinionPages - meanAnnexPages),
+        meanAnnexPages,
+        medianServices: quantile(serviceCounts, 0.5),
+        dateMin: dates[0] || "",
+        dateMax: dates[dates.length - 1] || "",
+      };
+    })
+    .sort((a, b) => MC_NOTE_TYPES.indexOf(a.type) - MC_NOTE_TYPES.indexOf(b.type));
+  renderTable(
+    $("mcNoteTypeTable"),
+    ["MC Note Type", "Documents", "Opinion Docs", "Opinion Share", "Median Pages", "Pre-Opinion Pages", "Opinion Pages", "Annex Pages", "Median Services", "BO Date Range"],
+    rows,
+    (row) => [
+      escapeHtml(row.type),
+      numCell(row.documents),
+      numCell(row.opinionDocs),
+      `${fmtPct.format(row.opinionDocShare)}%`,
+      numCell(row.medianPages),
+      numCell(row.meanPreOpinionPages),
+      numCell(row.meanOpinionPages),
+      numCell(row.meanAnnexPages),
+      numCell(row.medianServices),
+      `${escapeHtml(formatDate(row.dateMin))} to ${escapeHtml(formatDate(row.dateMax))}`,
+    ]
+  );
+}
+
+function pageMetricConfig(metric) {
+  if (metric === "Annex Page Count") {
+    return { value: (d) => d.meanAnnexPages, label: "Mean Annex Pages", tip: "mean annex pages" };
+  }
+  if (metric === "Page count before opinion") {
+    return { value: (d) => d.meanPreOpinionPages, label: "Mean Pre-Opinion Pages", tip: "mean pre-opinion pages" };
+  }
+  return { value: (d) => d.meanPages, label: "Mean Total Pages", tip: "mean total pages" };
+}
+
+function pageMonthlyGroups(rows) {
+  return monthlyGroups(rows).map((item) => ({
+    ...item,
+    meanPreOpinionPages: mean(item.rows.map((row) => row["Page count before opinion"])),
+    meanAnnexPages: mean(item.rows.map((row) => row["Annex Page Count"])),
+  }));
+}
+
+function pagePeriodGroups(rows) {
+  if (state.pageTrendPeriod === "month") return pageMonthlyGroups(rows);
+  const map = new Map();
+  rows
+    .filter((row) => timelineMonth(row))
+    .forEach((row) => {
+      const month = timelineMonth(row);
+      const year = month.slice(0, 4);
+      const quarter = Math.floor((Number(month.slice(5, 7)) - 1) / 3) + 1;
+      const period = `${year} Q${quarter}`;
+      const key = `${period}|${row["Template Type"]}`;
+      if (!map.has(key)) {
+        map.set(key, { month: period, template: row["Template Type"], rows: [] });
+      }
+      map.get(key).rows.push(row);
+    });
+  return Array.from(map.values())
+    .map((item) => ({
+      ...item,
+      documents: item.rows.length,
+      meanPages: mean(item.rows.map((row) => row["Document Page Count"])),
+      meanPreOpinionPages: mean(item.rows.map((row) => row["Page count before opinion"])),
+      meanAnnexPages: mean(item.rows.map((row) => row["Annex Page Count"])),
+    }))
+    .sort((a, b) => a.month.localeCompare(b.month));
+}
+
+function renderPageTrendChart() {
+  const metric = pageMetricConfig(state.pageTrendMetric);
+  const data = pagePeriodGroups(state.filtered);
+  const periodLabel = state.pageTrendPeriod === "quarter" ? "quarter" : "month";
+  renderLineChart($("pageTrendChart"), data, {
+    value: metric.value,
+    label: metric.label,
     movingAverage: true,
-    tip: (d) => `${d.month} ${d.template}<br>${fmtInt.format(d.meanWords)} mean words`,
+    tip: (d) => `${d.month} ${d.template}<br>${fmtOne.format(metric.value(d))} ${metric.tip}<br>${fmtInt.format(d.documents)} documents<br>Grouped by ${periodLabel}`,
   });
 }
 
-function renderTimeManualChart() {
-  const data = monthlyGroups(state.filtered).map((d) => ({
-    ...d,
-    manualRate: d.rows.length ? (d.rows.filter((row) => row.Extraction === "Manual").length / d.rows.length) * 100 : 0,
+function pageTemplateStats(rows) {
+  return Array.from(groupBy(rows, (row) => row["Template Type"]).entries())
+    .map(([template, items]) => {
+      const pages = items.map((row) => n(row["Document Page Count"]));
+      const pre = items.map((row) => n(row["Page count before opinion"]));
+      const annex = items.map((row) => n(row["Annex Page Count"]));
+      const totalPages = pages.reduce((sum, value) => sum + value, 0);
+      const annexPages = annex.reduce((sum, value) => sum + value, 0);
+      return {
+        template,
+        docs: items.length,
+        meanPages: mean(pages),
+        medianPages: quantile(pages, 0.5),
+        meanPreOpinionPages: mean(pre),
+        medianPreOpinionPages: quantile(pre, 0.5),
+        meanAnnexPages: mean(annex),
+        medianAnnexPages: quantile(annex, 0.5),
+        annexShare: totalPages ? (annexPages / totalPages) * 100 : 0,
+      };
+    })
+    .sort((a, b) => templateSort(a.template, b.template));
+}
+
+function renderAnnexTemplateChart() {
+  const rows = pageTemplateStats(state.filtered);
+  renderHorizontalBars($("annexTemplateChart"), rows, {
+    label: (d) => d.template,
+    value: (d) => d.medianAnnexPages,
+    color: (d) => templateColor(d.template),
+    tip: (d) => `${d.template}<br>${fmtOne.format(d.medianAnnexPages)} median annex pages<br>${fmtPct.format(d.annexShare)}% of total pages`,
+  });
+}
+
+function renderPageCompositionChart() {
+  const rows = pageTemplateStats(state.filtered);
+  const data = rows.flatMap((row) => [
+    { template: row.template, part: "Pre-opinion", value: row.meanPreOpinionPages },
+    { template: row.template, part: "Opinion", value: Math.max(0, row.meanPages - row.meanPreOpinionPages - row.meanAnnexPages) },
+    { template: row.template, part: "Annex", value: row.meanAnnexPages },
+  ]);
+  renderStackedTemplateBars($("pageCompositionChart"), data, rows.map((row) => row.template));
+}
+
+function renderStackedTemplateBars(container, data, templates) {
+  const orderedTemplates = [...templates].sort(templateSort);
+  if (!orderedTemplates.length) return empty(container);
+  const parts = PAGE_COMPOSITION_PARTS;
+  const colors = PAGE_COMPOSITION_COLORS;
+  const totals = new Map(
+    orderedTemplates.map((template) => [
+      template,
+      parts.reduce((sum, part) => sum + n(data.find((item) => item.template === template && item.part === part)?.value), 0),
+    ])
+  );
+  const rawMax = Math.max(...Array.from(totals.values()), 1);
+  const max = Math.ceil(rawMax / 5) * 5;
+  const svgWidth = 600;
+  const height = Math.max(300, 116 + orderedTemplates.length * 42);
+  const svg = makeSvg(container, svgWidth, height);
+  const margin = { top: 34, right: 64, bottom: 68, left: 82 };
+  const width = svgWidth - margin.left - margin.right;
+  const rowGap = 42;
+  const barHeight = 18;
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((ratio) => max * ratio);
+
+  let html = ticks
+    .map((value) => {
+      const x = margin.left + (value / max) * width;
+      return `<line class="grid-line" x1="${x}" x2="${x}" y1="${margin.top - 8}" y2="${
+        margin.top + orderedTemplates.length * rowGap - 12
+      }"></line>
+      <text x="${x}" y="${margin.top + orderedTemplates.length * rowGap + 12}" text-anchor="middle" fill="${COLORS.neutral}" font-size="11">${fmtInt.format(
+        value
+      )}</text>`;
+    })
+    .join("");
+  html += orderedTemplates
+    .map((template, index) => {
+      const y = margin.top + index * rowGap;
+      let x = margin.left;
+      const total = totals.get(template) || 0;
+      const segments = parts
+        .map((part) => {
+          const value = n(data.find((item) => item.template === template && item.part === part)?.value);
+          const segmentW = max ? (value / max) * width : 0;
+          const label = segmentW > 34 ? `<text x="${x + segmentW / 2}" y="${y + 13}" text-anchor="middle" fill="${
+            part === "Annex" ? COLORS.ink : "#ffffff"
+          }" font-size="9" font-weight="850">${fmtOne.format(value)}</text>` : "";
+          const segment = `<rect x="${x}" y="${y}" width="${Math.max(0, segmentW)}" height="${barHeight}" rx="4" fill="${colors[part]}" data-tip="${escapeAttr(
+            `${template}<br>${part}: ${fmtOne.format(value)} mean pages<br>Total: ${fmtOne.format(total)} mean pages`
+          )}"></rect>${label}`;
+          x += segmentW;
+          return segment;
+        })
+        .join("");
+      return `<g>
+        <text x="${margin.left - 12}" y="${y + 13}" text-anchor="end" fill="${COLORS.ink}" font-size="12" font-weight="850">${escapeHtml(template)}</text>
+        ${segments}
+        <text x="${margin.left + (total / max) * width + 8}" y="${y + 13}" fill="${COLORS.neutral}" font-size="11" font-weight="750">${fmtOne.format(total)}</text>
+      </g>`;
+    })
+    .join("");
+  html += `<text x="${margin.left + width / 2}" y="${margin.top + orderedTemplates.length * rowGap + 34}" text-anchor="middle" fill="${COLORS.neutral}" font-size="11">Mean document pages</text>`;
+  html += parts
+    .map(
+      (part, index) =>
+        `<g><rect x="${margin.left + index * 150}" y="${height - 24}" width="12" height="12" rx="2" fill="${colors[part]}"></rect><text x="${
+          margin.left + 18 + index * 150
+        }" y="${height - 14}" fill="${COLORS.ink}" font-size="11" font-weight="750">${escapeHtml(part)}</text></g>`
+    )
+    .join("");
+  svg.innerHTML = html;
+  bindSvgTips(svg);
+}
+
+function renderPageCompositionTimeChart() {
+  const container = $("pageCompositionTimeChart");
+  const groups = Array.from(groupBy(state.filtered.filter((row) => timelineMonth(row)), timelineMonth).entries())
+    .map(([month, rows]) => {
+      const meanPages = mean(rows.map((row) => row["Document Page Count"]));
+      const pre = mean(rows.map((row) => row["Page count before opinion"]));
+      const annex = mean(rows.map((row) => row["Annex Page Count"]));
+      return {
+        month,
+        documents: rows.length,
+        values: {
+          "Pre-opinion": pre,
+          Opinion: Math.max(0, meanPages - pre - annex),
+          Annex: annex,
+        },
+      };
+    })
+    .sort((a, b) => a.month.localeCompare(b.month));
+  if (!groups.length) return empty(container, "No dated page-composition records match the current filters.");
+
+  const svgHeight = 660;
+  const svg = makeSvg(container, 980, svgHeight);
+  const margin = { top: 32, right: 34, bottom: 44, left: 70 };
+  const width = 980 - margin.left - margin.right;
+  const stackHeight = 250;
+  const maTop = 338;
+  const maHeight = 86;
+  const pctTop = 500;
+  const pctHeight = 72;
+  const totals = groups.map((item) => PAGE_COMPOSITION_PARTS.reduce((sum, part) => sum + n(item.values[part]), 0));
+  const max = Math.ceil(Math.max(...totals, 1) / 5) * 5;
+  const step = width / groups.length;
+  const barW = Math.max(5, Math.min(24, step * 0.72));
+  const y = (value) => margin.top + stackHeight - (value / max) * stackHeight;
+  const maSeries = PAGE_COMPOSITION_PARTS.map((part) => ({
+    part,
+    points: groups.map((item, index) => {
+      const window = groups.slice(Math.max(0, index - 2), index + 1);
+      return { month: item.month, value: mean(window.map((entry) => entry.values[part])) };
+    }),
   }));
-  renderLineChart($("timeManualChart"), data, {
-    value: (d) => d.manualRate,
-    label: "Manual Rate (%)",
-    tip: (d) => `${d.month} ${d.template}<br>${fmtPct.format(d.manualRate)}% manual<br>${fmtInt.format(d.documents)} documents`,
+  const maMax = Math.ceil(Math.max(...maSeries.flatMap((series) => series.points.map((point) => point.value)), 1) / 5) * 5;
+  const maY = (value) => maTop + maHeight - (value / maMax) * maHeight;
+
+  let html = `<text x="${margin.left}" y="18" fill="${COLORS.neutral}" font-size="11" font-weight="800">Stacked columns show mean pages per document.</text>`;
+  html += gridY(max, margin, width, stackHeight, 5).join("");
+  groups.forEach((item, monthIndex) => {
+    let running = 0;
+    const x = margin.left + monthIndex * step + (step - barW) / 2;
+    PAGE_COMPOSITION_PARTS.forEach((part) => {
+      const value = n(item.values[part]);
+      if (!value) return;
+      const y0 = y(running + value);
+      const y1 = y(running);
+      html += `<rect x="${x}" y="${y0}" width="${barW}" height="${Math.max(1, y1 - y0)}" rx="2" fill="${PAGE_COMPOSITION_COLORS[part]}" data-tip="${escapeAttr(
+        `${item.month}<br>${part}: ${fmtOne.format(value)} mean pages<br>${fmtInt.format(item.documents)} documents`
+      )}"></rect>`;
+      running += value;
+    });
+  });
+  const months = groups.map((item) => item.month);
+  html += monthTicks(months, margin, width, stackHeight);
+  html += `<text x="${margin.left}" y="${maTop - 16}" fill="${COLORS.ink}" font-size="12" font-weight="850">3-month moving average</text>`;
+  html += [0, 0.5, 1]
+    .map((ratio) => {
+      const value = maMax * ratio;
+      const tickY = maY(value);
+      return `<line class="grid-line" x1="${margin.left}" x2="${margin.left + width}" y1="${tickY}" y2="${tickY}"></line>
+        <text x="${margin.left - 10}" y="${tickY + 4}" text-anchor="end" fill="${COLORS.neutral}" font-size="10">${fmtInt.format(value)}</text>`;
+    })
+    .join("");
+  maSeries.forEach((series) => {
+    const path = series.points
+      .map((point, index) => `${index === 0 ? "M" : "L"} ${margin.left + (index / Math.max(1, series.points.length - 1)) * width} ${maY(point.value)}`)
+      .join(" ");
+    html += `<path d="${path}" fill="none" stroke="${PAGE_COMPOSITION_COLORS[series.part]}" stroke-width="3.2" stroke-linecap="round"></path>`;
+  });
+  html += monthTicks(months, { ...margin, top: maTop }, width, maHeight);
+  html += `<text x="${margin.left}" y="${pctTop - 16}" fill="${COLORS.ink}" font-size="12" font-weight="850">100% monthly mix</text>`;
+  [0, 0.5, 1].forEach((ratio) => {
+    const tickY = pctTop + pctHeight - ratio * pctHeight;
+    html += `<line class="grid-line" x1="${margin.left}" x2="${margin.left + width}" y1="${tickY}" y2="${tickY}"></line>
+      <text x="${margin.left - 10}" y="${tickY + 4}" text-anchor="end" fill="${COLORS.neutral}" font-size="10">${fmtInt.format(ratio * 100)}%</text>`;
+  });
+  groups.forEach((item, monthIndex) => {
+    const total = PAGE_COMPOSITION_PARTS.reduce((sum, part) => sum + n(item.values[part]), 0);
+    if (!total) return;
+    let runningPct = 0;
+    const x = margin.left + monthIndex * step + (step - barW) / 2;
+    PAGE_COMPOSITION_PARTS.forEach((part) => {
+      const value = n(item.values[part]);
+      if (!value) return;
+      const pct = value / total;
+      const y0 = pctTop + pctHeight - (runningPct + pct) * pctHeight;
+      const y1 = pctTop + pctHeight - runningPct * pctHeight;
+      html += `<rect x="${x}" y="${y0}" width="${barW}" height="${Math.max(1, y1 - y0)}" rx="2" fill="${PAGE_COMPOSITION_COLORS[part]}" data-tip="${escapeAttr(
+        `${item.month}<br>${part}: ${fmtPct.format(pct * 100)}% of mean pages<br>${fmtOne.format(value)} of ${fmtOne.format(total)} mean pages`
+      )}"></rect>`;
+      runningPct += pct;
+    });
+  });
+  html += monthTicks(months, { ...margin, top: pctTop }, width, pctHeight);
+  html += `<text x="${margin.left + width / 2}" y="${svgHeight - 14}" text-anchor="middle" fill="${COLORS.neutral}" font-size="12">BO validation month</text>`;
+  html += PAGE_COMPOSITION_PARTS.map((part, index) => {
+    const x = margin.left + index * 150;
+    return `<g><rect x="${x}" y="${svgHeight - 34}" width="12" height="12" rx="2" fill="${PAGE_COMPOSITION_COLORS[part]}"></rect><text x="${
+      x + 18
+    }" y="${svgHeight - 24}" fill="${COLORS.ink}" font-size="11" font-weight="750">${escapeHtml(part)}</text></g>`;
+  }).join("");
+  svg.innerHTML = html;
+  bindSvgTips(svg);
+}
+
+function renderPageSummaryTable() {
+  const rows = pageTemplateStats(state.filtered);
+  renderTable(
+    $("pageSummaryTable"),
+    ["Template", "Docs", "Mean Total", "Median Total", "Mean Pre-Opinion", "Mean Annex", "Median Annex", "Annex Share"],
+    rows,
+    (row) => [
+      `<span class="pill">${escapeHtml(row.template)}</span>`,
+      numCell(row.docs),
+      numCell(row.meanPages),
+      numCell(row.medianPages),
+      numCell(row.meanPreOpinionPages),
+      numCell(row.meanAnnexPages),
+      numCell(row.medianAnnexPages),
+      `${fmtPct.format(row.annexShare)}%`,
+    ]
+  );
+}
+
+function renderAnnexOutlierTable() {
+  const rows = [...state.filtered]
+    .filter((row) => n(row["Annex Page Count"]) > 0)
+    .sort((a, b) => n(b["Annex Page Count"]) - n(a["Annex Page Count"]))
+    .slice(0, 60);
+  renderTable(
+    $("annexOutlierTable"),
+    ["Template", "BO Date", "Annex Pages", "Total Pages", "Pre-Opinion Pages", "File"],
+    rows,
+    (row) => [
+      `<span class="pill">${escapeHtml(row["Template Type"])}</span>`,
+      escapeHtml(formatDate(timelineDate(row))),
+      numCell(row["Annex Page Count"]),
+      numCell(row["Document Page Count"]),
+      numCell(row["Page count before opinion"]),
+      `<span class="file-cell">${escapeHtml(row["File Name"])}</span>`,
+    ]
+  );
+}
+
+function afsProcessLabel(row) {
+  const value = String(row["New AFS Process"] || "").trim();
+  return value === "New" || value === "Old" ? value : "";
+}
+
+function afsProcessRows() {
+  return state.filtered.filter((row) => row["Template Type"] === "AFS" && afsProcessLabel(row));
+}
+
+function renderAfsProcessPageChart() {
+  const container = $("afsProcessPageChart");
+  const rows = afsProcessRows().filter((row) => timelineMonth(row));
+  if (!rows.length) return empty(container, "No AFS rows with Old/New process values match the current filters.");
+  const grouped = Array.from(groupBy(rows, (row) => `${timelineMonth(row)}|${afsProcessLabel(row)}`).entries())
+    .map(([key, items]) => {
+      const [month, process] = key.split("|");
+      return {
+        month,
+        process,
+        documents: items.length,
+        meanPages: mean(items.map((row) => row["Document Page Count"])),
+        medianPages: quantile(items.map((row) => row["Document Page Count"]), 0.5),
+      };
+    })
+    .sort((a, b) => a.month.localeCompare(b.month) || a.process.localeCompare(b.process));
+  const months = Array.from(new Set(grouped.map((row) => row.month))).sort();
+  const processes = ["Old", "New"].filter((process) => grouped.some((row) => row.process === process));
+  const svg = makeSvg(container, 980, 430);
+  const margin = { top: 42, right: 88, bottom: 72, left: 70 };
+  const width = 980 - margin.left - margin.right;
+  const height = 430 - margin.top - margin.bottom;
+  const max = Math.ceil(Math.max(...grouped.map((row) => row.meanPages), 1) / 5) * 5;
+  const x = (monthIndex) => margin.left + (monthIndex / Math.max(1, months.length - 1)) * width;
+  const y = (value) => margin.top + height - (value / max) * height;
+
+  let html = `<text x="${margin.left}" y="20" fill="${COLORS.neutral}" font-size="11" font-weight="800">Lines show monthly mean total pages for AFS documents.</text>`;
+  html += gridY(max, margin, width, height, 5).join("");
+  processes.forEach((process, processIndex) => {
+    const points = months
+      .map((month, monthIndex) => {
+        const row = grouped.find((item) => item.month === month && item.process === process);
+        return row ? { ...row, x: x(monthIndex), y: y(row.meanPages) } : null;
+      })
+      .filter(Boolean);
+    const path = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+    html += `<path d="${path}" fill="none" stroke="${AFS_PROCESS_COLORS[process]}" stroke-width="3.5" stroke-linecap="round"></path>`;
+    points.forEach((point) => {
+      html += `<circle cx="${point.x}" cy="${point.y}" r="4.5" fill="${AFS_PROCESS_COLORS[process]}" stroke="#ffffff" stroke-width="1.5" data-tip="${escapeAttr(
+        `${point.month}<br>${process} process<br>${fmtOne.format(point.meanPages)} mean pages<br>${fmtOne.format(point.medianPages)} median pages<br>${fmtInt.format(point.documents)} AFS documents`
+      )}"></circle>`;
+    });
+    const legendX = margin.left + 520 + processIndex * 110;
+    html += `<g><rect x="${legendX}" y="12" width="12" height="12" rx="2" fill="${AFS_PROCESS_COLORS[process]}"></rect><text x="${
+      legendX + 18
+    }" y="22" fill="${COLORS.ink}" font-size="11" font-weight="800">${escapeHtml(process)}</text></g>`;
+  });
+  html += monthTicks(months, margin, width, height);
+  html += `<text x="${margin.left + width / 2}" y="${height + margin.top + 50}" text-anchor="middle" fill="${COLORS.neutral}" font-size="12">BO validation month</text>`;
+  svg.innerHTML = html;
+  bindSvgTips(svg);
+}
+
+function renderAfsProcessPageTable() {
+  const rows = Array.from(groupBy(afsProcessRows(), afsProcessLabel).entries())
+    .map(([process, items]) => {
+      const dates = items.map(timelineDate).filter(Boolean).sort();
+      const meanPages = mean(items.map((row) => row["Document Page Count"]));
+      const pre = mean(items.map((row) => row["Page count before opinion"]));
+      const annex = mean(items.map((row) => row["Annex Page Count"]));
+      return {
+        process,
+        documents: items.length,
+        meanPages,
+        medianPages: quantile(items.map((row) => row["Document Page Count"]), 0.5),
+        meanPreOpinionPages: pre,
+        meanOpinionPages: Math.max(0, meanPages - pre - annex),
+        meanAnnexPages: annex,
+        dateMin: dates[0] || "",
+        dateMax: dates[dates.length - 1] || "",
+      };
+    })
+    .sort((a, b) => ["Old", "New"].indexOf(a.process) - ["Old", "New"].indexOf(b.process));
+  renderTable(
+    $("afsProcessPageTable"),
+    ["AFS Process", "AFS Docs", "Mean Pages", "Median Pages", "Pre-Opinion Pages", "Opinion Pages", "Annex Pages", "BO Date Range"],
+    rows,
+    (row) => [
+      `<span class="pill">${escapeHtml(row.process)}</span>`,
+      numCell(row.documents),
+      numCell(row.meanPages),
+      numCell(row.medianPages),
+      numCell(row.meanPreOpinionPages),
+      numCell(row.meanOpinionPages),
+      numCell(row.meanAnnexPages),
+      `${escapeHtml(formatDate(row.dateMin))} to ${escapeHtml(formatDate(row.dateMax))}`,
+    ]
+  );
+}
+
+function renderTimePagesChart() {
+  const data = monthlyGroups(state.filtered);
+  const metric = trendMetricConfig(state.timeTrendMetric);
+  renderLineChart($("timePagesChart"), data, {
+    value: metric.value,
+    label: metric.axisLabel,
+    movingAverage: true,
+    tip: (d) => `${d.month} ${d.template}<br>${metric.format(metric.value(d))} ${metric.tipLabel}`,
   });
 }
 
@@ -1114,7 +2534,7 @@ function renderTimeCumulativeChart() {
 
 function renderCalendarHeatmap() {
   const container = $("calendarHeatmap");
-  const data = Array.from(groupBy(state.filtered.filter((row) => row["Validation Month"]), (row) => row["Validation Month"]).entries())
+  const data = Array.from(groupBy(state.filtered.filter((row) => timelineMonth(row)), timelineMonth).entries())
     .map(([month, rows]) => ({ month, count: rows.length }))
     .sort((a, b) => a.month.localeCompare(b.month));
   if (!data.length) return empty(container);
@@ -1163,24 +2583,7 @@ function renderBatchView() {
       templates: Array.from(new Set(items.map((row) => row["Template Type"]))).join(", "),
     };
   });
-  const sorters = {
-    documents: (a, b) => b.documents - a.documents,
-    manualRate: (a, b) => b.manualRate - a.manualRate,
-    meanWords: (a, b) => b.meanWords - a.meanWords,
-    qualityFlags: (a, b) => b.qualityFlags - a.qualityFlags,
-  };
-  rows.sort(sorters[state.batchSort]);
-  renderHorizontalBars($("batchChart"), rows.slice(0, 18), {
-    label: (d) => d.batch,
-    value: (d) => d[state.batchSort] ?? d.documents,
-    color: (d) => templateColor((d.templates || "").split(", ")[0]),
-    suffix: state.batchSort === "manualRate" ? "%" : "",
-    onClick: (d) => lockBatch(d.batch),
-    tip: (d) =>
-      `${d.batch}<br>${fmtInt.format(d.documents)} docs<br>${fmtPct.format(d.manualRate)}% manual<br>${fmtInt.format(
-        d.qualityFlags
-      )} quality flags`,
-  });
+  rows.sort((a, b) => b.documents - a.documents);
   renderBatchTable(rows);
 }
 
@@ -1188,25 +2591,13 @@ function renderQualityView() {
   const flagRows = [
     ["Missing date", state.filtered.filter((row) => row["Has Missing Date"]).length],
     ["Future date", state.filtered.filter((row) => row["Is Future Date"]).length],
-    ["Missing GED", state.filtered.filter((row) => row["Has Missing GED"]).length],
-    ["Missing annex", state.filtered.filter((row) => row["Annex Page Count"] === null || row["Annex Page Count"] === undefined).length],
+    ["Missing BO date", state.filtered.filter((row) => row["Has Missing BO Date"]).length],
   ].map(([flag, count]) => ({ flag, count }));
   renderVerticalBars($("qualityChart"), flagRows, {
     label: (d) => d.flag,
     value: (d) => d.count,
-    color: (_, i) => ["#c1666b", "#b88a2c", "#376996", "#7759a6"][i],
+    color: (_, i) => ["#c1666b", "#b88a2c", "#00856f"][i],
     tip: (d) => `${d.flag}<br>${fmtInt.format(d.count)} records`,
-  });
-
-  const gedRows = Array.from(groupBy(state.filtered, (row) => row["GED Match Status"] || "Missing GED status").entries())
-    .map(([status, items]) => ({ status, count: items.length }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 8);
-  renderHorizontalBars($("gedChart"), gedRows, {
-    label: (d) => shortLabel(d.status, 24),
-    value: (d) => d.count,
-    color: (_, i) => ["#376996", "#2a9d8f", "#c1666b", "#b88a2c", "#7759a6", "#2f8db3"][i % 6],
-    tip: (d) => `${d.status}<br>${fmtInt.format(d.count)} records`,
   });
   renderQualityTable();
 }
@@ -1313,13 +2704,13 @@ function renderRecordTable() {
   $("pageStatus").textContent = `${state.page} / ${totalPages}`;
   $("prevPage").disabled = state.page <= 1;
   $("nextPage").disabled = state.page >= totalPages;
-  renderTable($("recordTable"), ["Template", "Extraction", "Batch", "Date", "Words", "Pages", "Op", "File"], pageRows, (row) => [
+  renderTable($("recordTable"), ["Template", "Extraction", "Product", "BO Date", "Date", "Words", "Op", "File"], pageRows, (row) => [
     `<span class="pill">${escapeHtml(row["Template Type"])}</span>`,
     `<span class="pill ${row.Extraction === "Manual" ? "manual" : "auto"}">${escapeHtml(row.Extraction)}</span>`,
-    escapeHtml(row["Batch Folder"]),
+    escapeHtml(shortLabel(row["Financing Product Name"], 28)),
+    escapeHtml(formatDate(row["BO Validation Date"])),
     escapeHtml(formatDate(row["Validation Date"])),
     numCell(row["Text Before Opinions"]),
-    numCell(row["Document Page Count"]),
     escapeHtml(row["Operation Number"] || ""),
     `<span class="file-cell">${escapeHtml(row["File Name"])}</span>`,
   ]);
@@ -1330,7 +2721,7 @@ function recordSorter() {
     "words-desc": (a, b) => n(b["Text Before Opinions"]) - n(a["Text Before Opinions"]),
     "words-asc": (a, b) => n(a["Text Before Opinions"]) - n(b["Text Before Opinions"]),
     "pages-desc": (a, b) => n(b["Document Page Count"]) - n(a["Document Page Count"]),
-    "date-desc": (a, b) => String(b["Validation Date"] || "").localeCompare(String(a["Validation Date"] || "")),
+    "date-desc": (a, b) => String(timelineDate(b)).localeCompare(String(timelineDate(a))),
     "manual-first": (a, b) => Number(b.Extraction === "Manual") - Number(a.Extraction === "Manual"),
   };
   return sorters[state.recordSort];
@@ -1445,7 +2836,7 @@ function renderDivergingBars(container, data, options) {
   const margin = { top: 22, right: 92, bottom: 34, left: 306 };
   const width = 920 - margin.left - margin.right;
   const center = margin.left + width / 2;
-  const max = Math.max(...data.map((d) => Math.abs(options.value(d))), 1);
+  const max = options.max || Math.max(...data.map((d) => Math.abs(options.value(d))), 1);
   const nameX = 190;
   const negativeValueX = margin.left - 12;
   const positiveValueX = margin.left + width + 12;
@@ -1456,7 +2847,7 @@ function renderDivergingBars(container, data, options) {
       const value = options.value(d);
       const barW = (Math.abs(value) / max) * (width / 2);
       const x = value >= 0 ? center : center - barW;
-      const color = value >= 0 ? COLORS.green : COLORS.rose;
+      const color = options.color ? options.color(d) : value >= 0 ? COLORS.green : COLORS.rose;
       const valueLabel = options.valueFormat ? options.valueFormat(value) : `${value > 0 ? "+" : ""}${fmtOne.format(value)} pp`;
       const valueX = value >= 0 ? positiveValueX : negativeValueX;
       const valueAnchor = value >= 0 ? "start" : "end";
@@ -1515,25 +2906,28 @@ function renderLineChart(container, data, options) {
   const y = (value) => margin.top + height - (value / max) * height;
   const lookup = new Map(data.map((d) => [`${d.month}|${d.template}`, d]));
   let html = gridXY(months.length, max, margin, width, height, { yLabel: options.label });
-  templates.forEach((template) => {
+  templates.forEach((template, templateIndex) => {
+    const color = options.color ? options.color(template, templateIndex) : templateColor(template);
     const points = months
       .map((month) => lookup.get(`${month}|${template}`))
       .filter(Boolean);
     if (!points.length) return;
     const path = points.map((d, i) => `${i === 0 ? "M" : "L"} ${x(d.month)} ${y(options.value(d))}`).join(" ");
-    html += `<path d="${path}" fill="none" stroke="${templateColor(template)}" stroke-width="3"></path>`;
+    html += `<path d="${path}" fill="none" stroke="${color}" stroke-width="3"></path>`;
     html += points
-      .map((d) => `<circle class="point" cx="${x(d.month)}" cy="${y(options.value(d))}" r="4" fill="${templateColor(template)}" data-tip="${escapeAttr(options.tip(d))}"></circle>`)
+      .map((d) => `<circle class="point" cx="${x(d.month)}" cy="${y(options.value(d))}" r="4" fill="${color}" data-tip="${escapeAttr(options.tip(d))}"></circle>`)
       .join("");
     if (options.movingAverage) {
       const ma = movingAverage(points, options.value);
       const maPath = ma.map((d, i) => `${i === 0 ? "M" : "L"} ${x(d.month)} ${y(d.value)}`).join(" ");
-      html += `<path d="${maPath}" fill="none" stroke="${templateColor(template)}" stroke-width="2" opacity="0.38" stroke-dasharray="6 5"></path>`;
+      html += `<path d="${maPath}" fill="none" stroke="${color}" stroke-width="2" opacity="0.38" stroke-dasharray="6 5"></path>`;
     }
   });
   html += monthTicks(months, margin, width, height);
   html += templates
-    .map((template, i) => `<g><rect x="${margin.left + i * 88}" y="395" width="12" height="12" rx="2" fill="${templateColor(template)}"></rect><text x="${margin.left + 18 + i * 88}" y="406" fill="${COLORS.ink}" font-size="12">${template}</text></g>`)
+    .map((template, i) => `<g><rect x="${margin.left + i * 132}" y="395" width="12" height="12" rx="2" fill="${
+      options.color ? options.color(template, i) : templateColor(template)
+    }"></rect><text x="${margin.left + 18 + i * 132}" y="406" fill="${COLORS.ink}" font-size="12">${template}</text></g>`)
     .join("");
   svg.innerHTML = html;
   bindSvgTips(svg);
@@ -1620,7 +3014,16 @@ function downloadFilteredCsv() {
     "MC_Note_Type",
     "File Name",
     "Operation Number",
+    "Financing Product Name",
+    "Operation Special Activities Flag",
     "Validation Date",
+    "BO Validation Date",
+    "BO Validation Delta Days",
+    "BO Author (OPS/GLO)",
+    "BO PJ",
+    "BO RM",
+    "BO JU",
+    "BO ECON",
     "Document Page Count",
     "Page count before opinion",
     "Annex Page Count",
@@ -1655,14 +3058,128 @@ function debounce(fn, wait) {
   };
 }
 
-async function init() {
+function dogFaceSvg(faceColor, earColor, spotColor) {
+  return `<svg viewBox="0 0 64 64" aria-hidden="true">
+    <path d="M18 24 C9 18, 8 8, 17 7 C26 7, 27 17, 24 25 Z" fill="${earColor}"></path>
+    <path d="M46 24 C55 18, 56 8, 47 7 C38 7, 37 17, 40 25 Z" fill="${earColor}"></path>
+    <circle cx="32" cy="33" r="24" fill="${faceColor}"></circle>
+    <path d="M18 29 C20 18, 31 15, 34 26 C28 30, 24 32, 18 29 Z" fill="${spotColor}" opacity="0.82"></path>
+    <circle cx="24" cy="32" r="3.2" fill="#17212b"></circle>
+    <circle cx="40" cy="32" r="3.2" fill="#17212b"></circle>
+    <path d="M29 40 C31 38, 33 38, 35 40 C34 43, 30 43, 29 40 Z" fill="#17212b"></path>
+    <path d="M32 42 C30 47, 24 46, 22 43" fill="none" stroke="#17212b" stroke-width="2.4" stroke-linecap="round"></path>
+    <path d="M32 42 C34 47, 40 46, 42 43" fill="none" stroke="#17212b" stroke-width="2.4" stroke-linecap="round"></path>
+    <path d="M32 47 C35 48, 36 51, 33 53 C30 52, 29 49, 32 47 Z" fill="#e86f7e"></path>
+    <circle cx="23" cy="26" r="1.2" fill="#fff" opacity="0.9"></circle>
+    <circle cx="39" cy="26" r="1.2" fill="#fff" opacity="0.9"></circle>
+  </svg>`;
+}
+
+function makeDogParticle(layer, className, options) {
+  const faces = [
+    ["#ffd1dc", "#ff6fa3", "#fff4f8"],
+    ["#ffe4ef", "#d9467f", "#ff9fc2"],
+    ["#fff7fb", "#b83272", "#ffc2d9"],
+    ["#f8b7cf", "#8f245d", "#ffe6f0"],
+    ["#ffffff", "#ff8fbd", "#f6a6c9"],
+  ];
+  const palette = faces[Math.floor(Math.random() * faces.length)];
+  const dog = document.createElement("div");
+  dog.className = `dog-particle ${className}`;
+  dog.style.setProperty("--size", `${options.size}px`);
+  dog.style.setProperty("--start-x", `${options.x}px`);
+  dog.style.setProperty("--start-y", `${options.y}px`);
+  dog.style.setProperty("--dx", `${options.dx || 0}px`);
+  dog.style.setProperty("--dy", `${options.dy || 0}px`);
+  dog.style.setProperty("--drift", `${options.drift || 0}px`);
+  dog.style.setProperty("--spin", `${options.spin}deg`);
+  dog.style.setProperty("--duration", `${options.duration}s`);
+  dog.style.setProperty("--delay", `${options.delay || 0}s`);
+  dog.innerHTML = dogFaceSvg(...palette);
+  layer.appendChild(dog);
+}
+
+function triggerDogRain() {
+  document.documentElement.dataset.puppyStorm = String(Number(document.documentElement.dataset.puppyStorm || 0) + 1);
+  const existing = document.querySelector(".dog-rain-layer");
+  if (existing) existing.remove();
+
+  const layer = document.createElement("div");
+  layer.className = "dog-rain-layer";
+  document.body.appendChild(layer);
+
+  const face = $("elevenFace");
+  const rect = face ? face.getBoundingClientRect() : null;
+  const centerX = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
+  const centerY = rect ? rect.top + rect.height / 2 : 90;
+
+  for (let i = 0; i < 34; i += 1) {
+    makeDogParticle(layer, "dog-burst", {
+      x: centerX,
+      y: centerY,
+      dx: Math.random() * 330 - 165,
+      dy: Math.random() * 230 - 150,
+      spin: Math.random() * 520 - 260,
+      size: Math.random() * 18 + 24,
+      duration: Math.random() * 0.55 + 1.0,
+    });
+  }
+
+  for (let i = 0; i < 48; i += 1) {
+    makeDogParticle(layer, "dog-rain", {
+      x: Math.random() * window.innerWidth,
+      y: -80,
+      drift: Math.random() * 180 - 90,
+      spin: Math.random() * 420 - 210,
+      size: Math.random() * 24 + 24,
+      duration: Math.random() * 1.9 + 2.5,
+      delay: Math.random() * 1.35 + 0.18,
+    });
+  }
+
+  window.setTimeout(() => layer.remove(), 6200);
+}
+
+window.triggerDogRain = triggerDogRain;
+
+async function loadDashboardData({ preserveFilters = false } = {}) {
+  const snapshot = preserveFilters ? captureFilterState() : null;
   const response = await fetch(`dashboard_data.json?v=${Date.now()}`, { cache: "no-store" });
   if (!response.ok) throw new Error("Unable to load dashboard_data.json");
   state.raw = await response.json();
   state.records = state.raw.records;
   populateFilters();
-  bindEvents();
+  if (snapshot) restoreFilterState(snapshot);
   update();
+}
+
+async function refreshDashboardData() {
+  const button = $("refreshData");
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.classList.add("refreshing");
+  button.textContent = "Refreshing...";
+  try {
+    await loadDashboardData({ preserveFilters: true });
+    const now = new Date();
+    button.textContent = `Refreshed ${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+    window.setTimeout(() => {
+      button.textContent = originalText;
+      button.classList.remove("refreshing");
+      button.disabled = false;
+    }, 2200);
+  } catch (error) {
+    button.textContent = "Refresh Failed";
+    button.classList.remove("refreshing");
+    button.disabled = false;
+    window.alert(`Could not refresh dashboard_data.json: ${error.message}`);
+  }
+}
+
+async function init() {
+  await loadDashboardData();
+  bindEvents();
+  updateMcTypeControls();
 }
 
 init().catch((error) => {

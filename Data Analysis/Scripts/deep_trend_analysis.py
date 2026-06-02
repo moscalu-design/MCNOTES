@@ -5,9 +5,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from analysis_config import ANALYSIS_DATE, DATA_DIR, EXPORTS, REPORTS
 
-ROOT = Path(__file__).resolve().parent
-ANALYSIS_DATE = pd.Timestamp("2026-05-29")
+
+ROOT = DATA_DIR
 DEPARTMENTS = [
     "OPS",
     "GLO",
@@ -60,7 +61,7 @@ def md_table(df: pd.DataFrame) -> str:
 
 
 def main() -> None:
-    df = pd.read_csv(ROOT / "cleaned_database.csv")
+    df = pd.read_csv(EXPORTS / "cleaned_database.csv")
     df["Validation Date"] = pd.to_datetime(df["Validation Date"], errors="coerce")
     for col in [
         "Text Before Opinions",
@@ -104,7 +105,7 @@ def main() -> None:
         )
         .reset_index()
     )
-    period.to_csv(ROOT / "deep_period_trends.csv", index=False, encoding="utf-8-sig")
+    period.to_csv(EXPORTS / "deep_period_trends.csv", index=False, encoding="utf-8-sig")
 
     monthly = (
         hist.groupby(["Template Type", "month"])
@@ -132,7 +133,7 @@ def main() -> None:
     monthly["rolling_3m_delta_pages"] = monthly.groupby("Template Type")[
         "rolling_3m_median_pages"
     ].diff()
-    monthly.to_csv(ROOT / "deep_monthly_trends.csv", index=False, encoding="utf-8-sig")
+    monthly.to_csv(EXPORTS / "deep_monthly_trends.csv", index=False, encoding="utf-8-sig")
 
     drops = (
         monthly[monthly["docs"] >= 5]
@@ -141,7 +142,7 @@ def main() -> None:
         .head(6)
         .reset_index(drop=True)
     )
-    drops.to_csv(ROOT / "deep_shortening_points.csv", index=False, encoding="utf-8-sig")
+    drops.to_csv(EXPORTS / "deep_shortening_points.csv", index=False, encoding="utf-8-sig")
 
     service_rows = []
     for template, group in hist.groupby("Template Type"):
@@ -159,7 +160,7 @@ def main() -> None:
                     }
                 )
     service = pd.DataFrame(service_rows)
-    service.to_csv(ROOT / "deep_service_opinion_trends.csv", index=False, encoding="utf-8-sig")
+    service.to_csv(EXPORTS / "deep_service_opinion_trends.csv", index=False, encoding="utf-8-sig")
 
     authors = hist.dropna(subset=["Author"]).copy()
     author_stats = (
@@ -180,7 +181,7 @@ def main() -> None:
     )
     author_stats["first_date"] = author_stats["first_date"].dt.strftime("%Y-%m-%d")
     author_stats["last_date"] = author_stats["last_date"].dt.strftime("%Y-%m-%d")
-    author_stats.to_csv(ROOT / "deep_author_trends.csv", index=False, encoding="utf-8-sig")
+    author_stats.to_csv(EXPORTS / "deep_author_trends.csv", index=False, encoding="utf-8-sig")
 
     author_template = (
         authors.groupby(["Template Type", "Author"])
@@ -194,7 +195,7 @@ def main() -> None:
         )
         .reset_index()
     )
-    author_template.to_csv(ROOT / "deep_author_template_trends.csv", index=False, encoding="utf-8-sig")
+    author_template.to_csv(EXPORTS / "deep_author_template_trends.csv", index=False, encoding="utf-8-sig")
 
     def period_line(template: str, col: str) -> str:
         sub = period[period["Template Type"] == template].set_index("period")
@@ -277,7 +278,7 @@ Interpretation:
 - `deep_author_template_trends.csv`
 """
 
-    (ROOT / "DEEP_INSIGHTS.md").write_text(report.strip() + "\n", encoding="utf-8")
+    (REPORTS / "DEEP_INSIGHTS.md").write_text(report.strip() + "\n", encoding="utf-8")
     print("Wrote deep insights")
 
 

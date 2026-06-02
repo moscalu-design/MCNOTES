@@ -6,9 +6,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from analysis_config import EXPORTS, REPORTS, load_source_table
 
-OUT = Path(__file__).resolve().parent
-WORKBOOK = OUT / "MC_Note_Datebase.xlsx"
 DEPT_COLS = [
     "OPS",
     "GLO",
@@ -46,11 +45,8 @@ def markdown_table(df: pd.DataFrame) -> str:
 
 
 def load_database() -> pd.DataFrame:
-    df = pd.read_excel(WORKBOOK, sheet_name="Database", header=1)
-    df = df.dropna(how="all")
-    df = df.drop(columns=[c for c in df.columns if str(c).startswith("Unnamed")], errors="ignore")
-    df["Template"] = df["Template"].astype(str).str.upper().replace({"OTHER ": "OTHER"})
-    df["Validation Date"] = pd.to_datetime(df["Validation Date"], errors="coerce")
+    df = load_source_table()
+    df["Template"] = df["Template Type"]
     df["Year"] = df["Validation Date"].dt.year
     df["Month"] = df["Validation Date"].dt.to_period("M").astype(str)
     df.loc[df["Month"].eq("NaT"), "Month"] = None
@@ -226,7 +222,7 @@ Largest negative differences from the template median:
 - OTHER 2026YTD is significantly shorter by document pages; its total word median is lower but the bootstrap interval crosses zero, so the stronger statement is page compression rather than confirmed word-count compression.
 - Author/service-office effects are large enough to explain some apparent trend movement; use author filters before attributing every shift to template redesign.
 """
-    (OUT / "STATISTICAL_AUDIT.md").write_text(report, encoding="utf-8")
+    (REPORTS / "STATISTICAL_AUDIT.md").write_text(report, encoding="utf-8")
 
 
 def main() -> None:
@@ -235,9 +231,9 @@ def main() -> None:
     change_points = monthly_change_points(df)
     author_effects = author_within_template_effects(df)
 
-    tests.to_csv(OUT / "statistical_tests_2025_vs_2026.csv", index=False)
-    change_points.to_csv(OUT / "statistical_change_points.csv", index=False)
-    author_effects.to_csv(OUT / "statistical_author_effects.csv", index=False)
+    tests.to_csv(EXPORTS / "statistical_tests_2025_vs_2026.csv", index=False)
+    change_points.to_csv(EXPORTS / "statistical_change_points.csv", index=False)
+    author_effects.to_csv(EXPORTS / "statistical_author_effects.csv", index=False)
     write_report(tests, change_points, author_effects)
 
     print(

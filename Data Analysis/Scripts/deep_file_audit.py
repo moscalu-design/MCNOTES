@@ -10,13 +10,12 @@ from pathlib import Path
 import fitz
 import pandas as pd
 
+from analysis_config import ANALYSIS_DATE, EXPORTS, PROJECT_ROOT, REPORTS, load_source_table
 
-ROOT = Path(__file__).resolve().parents[1]
-OUT = Path(__file__).resolve().parent
-TODAY = date(2026, 5, 29)
 
-WORKBOOK = OUT / "MC_Note_Datebase.xlsx"
-DB_SHEET = "Database"
+ROOT = PROJECT_ROOT
+OUT = EXPORTS
+TODAY = ANALYSIS_DATE.date()
 
 PDF_ROOTS = {
     "AFS": ROOT / "AFS_Package" / "AFS_File_Folder",
@@ -221,11 +220,9 @@ def build_pdf_index() -> pd.DataFrame:
 
 
 def load_database() -> pd.DataFrame:
-    df = pd.read_excel(WORKBOOK, sheet_name=DB_SHEET, header=1)
-    df = df.dropna(how="all")
-    df = df.drop(columns=[c for c in df.columns if str(c).startswith("Unnamed")], errors="ignore")
+    df = load_source_table()
     df["Template Normalized"] = df["Template"].map(normalize_template)
-    df["db_row_number"] = df.index + 3
+    df["db_row_number"] = df.index + 2
     df["db_validation_date"] = df["Validation Date"].map(parse_excel_date)
     df["db_clean_file_name"] = df["File Name"].map(clean_name)
     return df
@@ -688,7 +685,7 @@ Shortest author/service-office groups with at least 8 documents:
 5. Add an author/service-office reliability note on GNG because the missing-author rate makes author conclusions fragile.
 """
 
-    (OUT / "FILE_DATE_AUDIT.md").write_text(report, encoding="utf-8")
+    (REPORTS / "FILE_DATE_AUDIT.md").write_text(report, encoding="utf-8")
 
     machine_summary = {
         "database_rows": len(db),

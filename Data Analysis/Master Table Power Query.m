@@ -1,7 +1,11 @@
 let
     PromoteHeaderByMarkers = (InputTable as table, Markers as list) as table =>
         let
-            Rows = Table.ToRows(InputTable),
+            CleanInput = Table.ReplaceErrorValues(
+                InputTable,
+                List.Transform(Table.ColumnNames(InputTable), each {_, null})
+            ),
+            Rows = Table.ToRows(CleanInput),
             TextRows = List.Transform(
                 Rows,
                 each List.Transform(_, each try Text.Trim(Text.From(_)) otherwise "")
@@ -12,7 +16,7 @@ let
             ),
             BestScore = List.Max(Scores),
             HeaderIndex = if BestScore = 0 then 0 else List.PositionOf(Scores, BestScore),
-            FromHeader = Table.Skip(InputTable, HeaderIndex),
+            FromHeader = Table.Skip(CleanInput, HeaderIndex),
             Promoted = Table.PromoteHeaders(FromHeader, [PromoteAllScalars=true])
         in
             Promoted,
@@ -37,11 +41,11 @@ let
     BODataRaw = BOSource{[Item="BO Data", Kind="Sheet"]}[Data],
     BOPromotedHeaders = PromoteHeaderByMarkers(
         BODataRaw,
-        {"Operation", "Operation Name", "Operation Team OPS/GLO Main Division Short Name"}
+        {"Operation", "Operation Name", "Operation Team OPS/GLO Main Division Short Name", "New AFS Process"}
     ),
     BOSelectedColumns = Table.SelectColumns(
         BOPromotedHeaders,
-        {"Operation", "Financing Product Name", "Operation Special Activities Flag", "PIN/GNG Validation Date", "Operation AFS Validation Date", "Operation Team OPS/GLO Main Division Short Name", "TEAM PJ", "TEAM RM", "TEAM JU", "Operation Team SG Main Division Short Name"},
+        {"Operation", "Financing Product Name", "Operation Special Activities Flag", "PIN/GNG Validation Date", "Operation AFS Validation Date", "Operation Team OPS/GLO Main Division Short Name", "TEAM PJ", "TEAM RM", "TEAM JU", "Operation Team SG Main Division Short Name", "New AFS Process"},
         MissingField.UseNull
     ),
     BOOperationTyped = Table.TransformColumns(
@@ -60,8 +64,8 @@ let
     ExpandedBO = Table.ExpandTableColumn(
         JoinedBO,
         "BO",
-        {"Financing Product Name", "Operation Special Activities Flag", "PIN/GNG Validation Date", "Operation AFS Validation Date", "Operation Team OPS/GLO Main Division Short Name", "TEAM PJ", "TEAM RM", "TEAM JU", "Operation Team SG Main Division Short Name"},
-        {"BO Financing Product Name", "BO Operation Special Activities Flag", "BO PIN/GNG Validation Date", "BO Operation AFS Validation Date", "BO Operation Team OPS/GLO Main Division Short Name", "BO TEAM PJ", "BO TEAM RM", "BO TEAM JU", "BO Operation Team SG Main Division Short Name"}
+        {"Financing Product Name", "Operation Special Activities Flag", "PIN/GNG Validation Date", "Operation AFS Validation Date", "Operation Team OPS/GLO Main Division Short Name", "TEAM PJ", "TEAM RM", "TEAM JU", "Operation Team SG Main Division Short Name", "New AFS Process"},
+        {"BO Financing Product Name", "BO Operation Special Activities Flag", "BO PIN/GNG Validation Date", "BO Operation AFS Validation Date", "BO Operation Team OPS/GLO Main Division Short Name", "BO TEAM PJ", "BO TEAM RM", "BO TEAM JU", "BO Operation Team SG Main Division Short Name", "BO New AFS Process"}
     ),
     BOValidationDate = Table.AddColumn(
         ExpandedBO,
@@ -135,9 +139,17 @@ let
             else null,
         type text
     ),
-    RemovedRawBO = Table.RemoveColumns(
+    NewAFSProcess = Table.AddColumn(
         BOServiceECON,
-        {"BO Financing Product Name", "BO Operation Special Activities Flag", "BO PIN/GNG Validation Date", "BO Operation AFS Validation Date", "BO Operation Team OPS/GLO Main Division Short Name", "BO TEAM PJ", "BO TEAM RM", "BO TEAM JU", "BO Operation Team SG Main Division Short Name"}
+        "New AFS Process",
+        each if (try Text.Upper(Text.Trim(Text.From([Template]))) otherwise "") = "AFS"
+            then [#"BO New AFS Process"]
+            else "N/A",
+        type text
+    ),
+    RemovedRawBO = Table.RemoveColumns(
+        NewAFSProcess,
+        {"BO Financing Product Name", "BO Operation Special Activities Flag", "BO PIN/GNG Validation Date", "BO Operation AFS Validation Date", "BO Operation Team OPS/GLO Main Division Short Name", "BO TEAM PJ", "BO TEAM RM", "BO TEAM JU", "BO Operation Team SG Main Division Short Name", "BO New AFS Process"}
     ),
     MasterTable = Table.RenameColumns(
         RemovedRawBO,
@@ -145,7 +157,7 @@ let
     ),
     OrderedMasterTable = Table.ReorderColumns(
         MasterTable,
-        {"Source", "Template", "Extraction", "MC_Note_Type", "File Name", "Operation Number", "Financing Product Name", "Operation Special Activities Flag", "Validation Date", "Author", "BO Validation Date", "BO Author (OPS/GLO)", "Document Page Count", "Page count before opinion", "Annex Page Count", "Text Before Opinions", "OPS", "GLO", "PJ", "RM", "OCCO", "JU", "ECON", "CFC", "EIF", "FI", "IG", "PMM", "SG", "GIS", "HR", "OTHER", "BO PJ", "BO RM", "BO JU", "BO ECON"},
+        {"Source", "Template", "Extraction", "MC_Note_Type", "File Name", "Operation Number", "Financing Product Name", "Operation Special Activities Flag", "New AFS Process", "Validation Date", "Author", "BO Validation Date", "BO Author (OPS/GLO)", "Document Page Count", "Page count before opinion", "Annex Page Count", "Text Before Opinions", "OPS", "GLO", "PJ", "RM", "OCCO", "JU", "ECON", "CFC", "EIF", "FI", "IG", "PMM", "SG", "GIS", "HR", "OTHER", "BO PJ", "BO RM", "BO JU", "BO ECON"},
         MissingField.Ignore
     )
 in

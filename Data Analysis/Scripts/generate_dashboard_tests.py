@@ -6,9 +6,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from analysis_config import ANALYSIS_DATE, DATA_DIR, EXPORTS
 
-ROOT = Path(__file__).resolve().parent
-ANALYSIS_DATE = pd.Timestamp("2026-05-29")
+
+ROOT = DATA_DIR
 DEPARTMENTS = [
     "OPS",
     "GLO",
@@ -75,7 +76,7 @@ def top_rows(df: pd.DataFrame, sort_col: str, limit: int = 25) -> list[dict]:
 
 
 def main() -> None:
-    df = pd.read_csv(ROOT / "cleaned_database.csv")
+    df = pd.read_csv(EXPORTS / "cleaned_database.csv")
     df["Validation Date Parsed"] = pd.to_datetime(df["Validation Date"], errors="coerce")
     for col in [
         "Document Page Count",
@@ -212,12 +213,27 @@ def main() -> None:
             "id": "missing-ged-status",
             "category": "Match quality",
             "title": "GED match status is populated",
-            "status": "warn" if len(missing_ged) else "pass",
+            "status": "info" if len(missing_ged) else "pass",
             "metric": len(missing_ged),
             "unit": "rows",
             "finding": f"{len(missing_ged):,} rows have missing GED match status.",
-            "recommendation": "Use GED status as a dashboard filter and avoid treating unmatched records as missing from the corpus.",
+            "recommendation": "Master_Table_Q does not carry the original GED status field; use this only when GED columns are restored to the source.",
             "rows": [row_payload(row) for _, row in missing_ged.head(25).iterrows()],
+        }
+    )
+
+    missing_bo_dates = df[df["BO Validation Date"].isna()].copy()
+    tests.append(
+        {
+            "id": "missing-bo-validation-dates",
+            "category": "BO fields",
+            "title": "BO validation date is populated",
+            "status": "warn" if len(missing_bo_dates) else "pass",
+            "metric": len(missing_bo_dates),
+            "unit": "rows",
+            "finding": f"{len(missing_bo_dates):,} rows have no BO validation date.",
+            "recommendation": "Use the BO dashboard view to compare MC validation date against BO validation date and isolate missing joins.",
+            "rows": [row_payload(row) for _, row in missing_bo_dates.head(25).iterrows()],
         }
     )
 
@@ -328,12 +344,12 @@ def main() -> None:
             detail.update(row)
             detail_rows.append(detail)
 
-    (ROOT / "dashboard_tests.json").write_text(
+    (EXPORTS / "dashboard_tests.json").write_text(
         json.dumps({"tests": tests}, ensure_ascii=True, indent=2),
         encoding="utf-8",
     )
-    pd.DataFrame(flat_rows).to_csv(ROOT / "dashboard_tests_summary.csv", index=False, encoding="utf-8-sig")
-    pd.DataFrame(detail_rows).to_csv(ROOT / "dashboard_tests_detail.csv", index=False, encoding="utf-8-sig")
+    pd.DataFrame(flat_rows).to_csv(EXPORTS / "dashboard_tests_summary.csv", index=False, encoding="utf-8-sig")
+    pd.DataFrame(detail_rows).to_csv(EXPORTS / "dashboard_tests_detail.csv", index=False, encoding="utf-8-sig")
     print(f"Wrote {len(tests)} tests")
 
 

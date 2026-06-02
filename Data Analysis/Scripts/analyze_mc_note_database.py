@@ -7,39 +7,21 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-
-ROOT = Path(__file__).resolve().parents[1]
-INPUT = ROOT / "MC_Note_Datebase.xlsx"
-OUT = ROOT / "Data Analysis"
-CHARTS = OUT / "charts"
-ANALYSIS_DATE = pd.Timestamp("2026-05-29")
-
-WORD_COLS = [
-    "OPS",
-    "GLO",
-    "PJ",
-    "RM",
-    "OCCO",
-    "JU",
-    "ECON",
-    "CFC",
-    "EIF",
-    "FI",
-    "IG",
-    "PMM",
-    "SG",
-    "GIS",
-    "HR",
-    "OTHER",
-]
-
-NUMERIC_COLS = [
-    "Document Page Count",
-    "Page count before opinion",
-    "Annex Page Count",
-    "Text Before Opinions",
-    *WORD_COLS,
-]
+from analysis_config import (
+    ANALYSIS_DATE,
+    BO_TEAM_SERVICE_COLS,
+    CHARTS,
+    EXPORTS,
+    REPORTS,
+    SOURCE_LABEL,
+    SOURCE_SHEET,
+    SOURCE_WORKBOOK,
+    WORD_COLS,
+    WORKBOOKS,
+    ensure_dirs,
+    format_dates_for_export,
+    load_source_table,
+)
 
 
 def pct(numerator: float, denominator: float) -> float:
@@ -90,31 +72,11 @@ def compact_stats(group: pd.DataFrame) -> pd.Series:
 
 
 def read_database() -> pd.DataFrame:
-    df = pd.read_excel(INPUT, sheet_name="Database", header=1)
-    df = df.loc[:, ~df.columns.astype(str).str.startswith("Unnamed")]
-    df = df.dropna(how="all")
-
-    for col in NUMERIC_COLS:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-
-    df["Validation Date"] = pd.to_datetime(df["Validation Date"], errors="coerce")
-    df["Template Type"] = df["Template"].replace({"Other": "OTHER"}).str.upper()
-    df["Batch Folder"] = df["Source"]
-    df["Extraction"] = df["Extraction"].astype(str).str.strip()
-    df["Department Word Total"] = df[WORD_COLS].fillna(0).sum(axis=1)
-    df["Department Sections With Words"] = df[WORD_COLS].notna().sum(axis=1)
-    df["Words Per Document Page"] = df["Text Before Opinions"] / df["Document Page Count"].replace(0, np.nan)
-    df["Words Per Pre Opinion Page"] = df["Text Before Opinions"] / df[
-        "Page count before opinion"
-    ].replace(0, np.nan)
-    df["Validation Month"] = df["Validation Date"].dt.to_period("M").dt.to_timestamp()
-    df["Validation Year"] = df["Validation Date"].dt.year
-    df["Has Validation Date"] = df["Validation Date"].notna()
-    return df
+    return load_source_table()
 
 
 def write_csv(df: pd.DataFrame, name: str) -> None:
-    df.to_csv(OUT / name, index=False, encoding="utf-8-sig")
+    df.to_csv(EXPORTS / name, index=False, encoding="utf-8-sig")
 
 
 def make_summaries(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
@@ -219,12 +181,76 @@ def make_summaries(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
         "top_50_word_count_outliers"
     ]["Validation Date"].dt.strftime("%Y-%m-%d")
 
+    product = (
+        df.groupby("Financing Product Name", dropna=False)
+        .agg(
+            documents=("File Name", "count"),
+            templates=("Template Type", lambda s: ", ".join(sorted(set(s.dropna().astype(str))))),
+            operations=("Operation Number", lambda s: int(s.notna().sum())),
+            mean_words=("Text Before Opinions", "mean"),
+            median_words=("Text Before Opinions", "median"),
+            mean_pages=("Document Page Count", "mean"),
+            first_validation_date=("Validation Date", "min"),
+            last_validation_date=("Validation Date", "max"),
+        )
+        .reset_index()
+        .sort_values("documents", ascending=False)
+    )
+    for col in ["mean_words", "median_words", "mean_pages"]:
+        product[col] = product[col].round(2)
+    product["first_validation_date"] = product["first_validation_date"].dt.strftime("%Y-%m-%d")
+    product["last_validation_date"] = product["last_validation_date"].dt.strftime("%Y-%m-%d")
+    summaries["financing_product_overview"] = product
+
+    bo_rows = []
+    for service, team_col in BO_TEAM_SERVICE_COLS.items():
+        service_rows = df[(df[service].fillna(0) > 0) & df[team_col].notna()].copy()
+        service_rows[team_col] = service_rows[team_col].astype(str).str.strip()
+        service_rows = service_rows[
+            service_rows[team_col].ne("")
+            & ~service_rows[team_col].str.upper().isin({"#", "N/A", "NA", "NONE"})
+        ]
+        for team, group in service_rows.groupby(team_col):
+            bo_rows.append(
+                {
+                    "Service": service,
+                    "BO Team": team,
+                    "opinion_count": len(group),
+                    "document_count": group["File Name"].nunique(),
+                    "total_words": int(group[service].sum()),
+                    "mean_words": round(group[service].mean(), 2),
+                    "median_words": round(group[service].median(), 2),
+                    "min_words": int(group[service].min()),
+                    "max_words": int(group[service].max()),
+                    "top_product": group["Financing Product Name"].mode().iat[0]
+                    if not group["Financing Product Name"].mode().empty
+                    else "",
+                }
+            )
+    summaries["bo_team_opinion_summary"] = pd.DataFrame(bo_rows).sort_values(
+        ["Service", "opinion_count", "median_words"], ascending=[True, False, False]
+    )
+
+    delta = df["BO Validation Delta Days"]
+    summaries["bo_validation_date_summary"] = pd.DataFrame(
+        [
+            {"metric": "rows", "value": len(df)},
+            {"metric": "with_bo_validation_date", "value": int(df["Has BO Validation Date"].sum())},
+            {"metric": "without_bo_validation_date", "value": int((~df["Has BO Validation Date"]).sum())},
+            {"metric": "same_day_as_mc_validation", "value": int(delta.eq(0).sum())},
+            {"metric": "bo_before_mc_validation", "value": int((delta < 0).sum())},
+            {"metric": "bo_after_mc_validation", "value": int((delta > 0).sum())},
+            {"metric": "median_delta_days_bo_minus_mc", "value": round(delta.median(), 2) if delta.notna().any() else np.nan},
+            {"metric": "mean_delta_days_bo_minus_mc", "value": round(delta.mean(), 2) if delta.notna().any() else np.nan},
+        ]
+    )
+
     summaries["data_quality_flags"] = pd.concat(
         [
             df.loc[df["Validation Date"].isna()].assign(Quality_Flag="Missing validation date"),
             df.loc[df["Validation Date"] > ANALYSIS_DATE].assign(Quality_Flag="Future validation date"),
             df.loc[df["Annex Page Count"].isna()].assign(Quality_Flag="Missing annex page count"),
-            df.loc[df["GED Match Status"].isna()].assign(Quality_Flag="Missing GED match status"),
+            df.loc[df["BO Validation Date"].isna()].assign(Quality_Flag="Missing BO validation date"),
         ],
         ignore_index=True,
     )[
@@ -236,14 +262,16 @@ def make_summaries(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
             "File Name",
             "Operation Number",
             "Validation Date",
+            "BO Validation Date",
             "Document Page Count",
             "Text Before Opinions",
-            "GED Match Status",
+            "Financing Product Name",
         ]
     ]
-    summaries["data_quality_flags"]["Validation Date"] = pd.to_datetime(
-        summaries["data_quality_flags"]["Validation Date"], errors="coerce"
-    ).dt.strftime("%Y-%m-%d")
+    for date_col in ["Validation Date", "BO Validation Date"]:
+        summaries["data_quality_flags"][date_col] = pd.to_datetime(
+            summaries["data_quality_flags"][date_col], errors="coerce"
+        ).dt.strftime("%Y-%m-%d")
 
     numeric_for_corr = df[
         [
@@ -349,6 +377,24 @@ def make_charts(df: pd.DataFrame, summaries: dict[str, pd.DataFrame]) -> None:
     fig.savefig(CHARTS / "department_word_share_by_template.png", dpi=180)
     plt.close(fig)
 
+    product = summaries["financing_product_overview"].head(12).copy()
+    if not product.empty:
+        fig, ax = plt.subplots(figsize=(10, 5.2))
+        product.sort_values("documents").plot(
+            kind="barh",
+            x="Financing Product Name",
+            y="documents",
+            legend=False,
+            ax=ax,
+            color="#2A9D8F",
+        )
+        ax.set_title("Top Financing Products by Document Volume")
+        ax.set_xlabel("Documents")
+        ax.set_ylabel("")
+        fig.tight_layout()
+        fig.savefig(CHARTS / "financing_product_volume.png", dpi=180)
+        plt.close(fig)
+
     sample = df.sample(min(3000, len(df)), random_state=7)
     fig, ax = plt.subplots(figsize=(8, 5))
     for template, group in sample.groupby("Template Type"):
@@ -445,13 +491,38 @@ def make_report(df: pd.DataFrame, summaries: dict[str, pd.DataFrame]) -> None:
     missing_ged = int(df["GED Match Status"].isna().sum())
     missing_annex = int(df["Annex Page Count"].isna().sum())
 
+    top_products = summaries["financing_product_overview"].head(10)
+    product_lines = [
+        "| Financing Product | Documents | Templates | Median Words | Mean Pages |",
+        "|---|---:|---|---:|---:|",
+    ]
+    for _, row in top_products.iterrows():
+        product_lines.append(
+            f"| {str(row['Financing Product Name']).replace('|', ' ')} | {int(row['documents']):,} | "
+            f"{row['templates']} | {row['median_words']:,.2f} | {row['mean_pages']:,.2f} |"
+        )
+
+    team_summary = summaries["bo_team_opinion_summary"]
+    team_lines = [
+        "| Service | Highest-Median Team | Median Words | Opinions | Lowest-Median Team | Median Words | Opinions |",
+        "|---|---|---:|---:|---|---:|---:|",
+    ]
+    for service, group in team_summary[team_summary["opinion_count"] >= 3].groupby("Service"):
+        high = group.sort_values(["median_words", "opinion_count"], ascending=[False, False]).iloc[0]
+        low = group.sort_values(["median_words", "opinion_count"], ascending=[True, False]).iloc[0]
+        team_lines.append(
+            f"| {service} | {high['BO Team']} | {high['median_words']:,.2f} | {int(high['opinion_count']):,} | "
+            f"{low['BO Team']} | {low['median_words']:,.2f} | {int(low['opinion_count']):,} |"
+        )
+
+    bo_summary = summaries["bo_validation_date_summary"].set_index("metric")["value"].to_dict()
+
     report = f"""# MC Note Database Analysis
 
 ## Scope
 
-Input workbook: `{INPUT.name}`  
-Main sheet analysed: `Database`  
-Output folder: `Data Analysis`
+Input workbook and sheet: `{SOURCE_LABEL}`  
+Output folders: `Exports`, `Reports`, `Workbooks`, and `charts`
 
 I treated `Source` as the batch folder / batch source column and normalized the template labels to `AFS`, `GNG`, `OTHER`, and `PIN`. The requested analysis focuses on `AFS`, `GNG`, and `OTHER`; `PIN` is retained in the exported files so the future website can compare the full database when useful.
 
@@ -465,6 +536,8 @@ I treated `Source` as the batch folder / batch source column and normalized the 
 - Mean / median `Text Before Opinions` words: {fmt_float(df["Text Before Opinions"].mean())} / {fmt_float(df["Text Before Opinions"].median())}
 - Mean / median document pages: {fmt_float(df["Document Page Count"].mean())} / {fmt_float(df["Document Page Count"].median())}
 - Correlation between document pages and word count: {page_word_corr:.3f}
+- BO validation dates present: {int(bo_summary.get("with_bo_validation_date", 0)):,} rows; missing: {int(bo_summary.get("without_bo_validation_date", 0)):,}
+- Median BO-minus-MC validation-date delta: {bo_summary.get("median_delta_days_bo_minus_mc", np.nan)} days
 
 ## Template Summary
 
@@ -483,6 +556,22 @@ Department-coded word counts are sparse by design: many documents only have word
 {chr(10).join(top_dept_lines)}
 
 Full department-by-template detail is exported to `department_word_counts_by_template.csv`.
+
+## BO Fields And Products
+
+The `Master_Table_Q` sheet adds BO validation date, BO team columns, financing product name, and special-activity flags. These are now included in `cleaned_database.csv`, `dashboard_data.json`, and the dashboard record explorer.
+
+Top financing products:
+
+{chr(10).join(product_lines)}
+
+## BO Team Opinion Extremes
+
+For PJ, RM, JU, and ECON, I used the matching BO team column (`BO PJ`, `BO RM`, `BO JU`, `BO ECON`) and compared rows where that service had a positive opinion word count. The table below shows the highest and lowest median word-count teams for each service, requiring at least three opinions per team.
+
+{chr(10).join(team_lines)}
+
+Full BO team detail is exported to `bo_team_opinion_summary.csv`.
 
 ## Time Series
 
@@ -534,32 +623,30 @@ These rows are exported to `data_quality_flags.csv`. The missing GED match statu
 - `monthly_time_series.csv`
 - `yearly_time_series.csv`
 - `manual_vs_automated_effect.csv`
+- `financing_product_overview.csv`
+- `bo_team_opinion_summary.csv`
+- `bo_validation_date_summary.csv`
 - `top_50_word_count_outliers.csv`
 - `data_quality_flags.csv`
 - `correlation_matrix.csv`
 - `mc_note_analysis_outputs.xlsx`
 """
 
-    (OUT / "README.md").write_text(dedent(report).strip() + "\n", encoding="utf-8")
+    (REPORTS / "README.md").write_text(dedent(report).strip() + "\n", encoding="utf-8")
 
 
 def main() -> None:
-    OUT.mkdir(exist_ok=True)
-    CHARTS.mkdir(exist_ok=True)
+    ensure_dirs()
     df = read_database()
 
-    cleaned = df.copy()
-    for col in ["Validation Date", "Validation Month"]:
-        cleaned[col] = pd.to_datetime(cleaned[col], errors="coerce").dt.strftime(
-            "%Y-%m-%d" if col == "Validation Date" else "%Y-%m"
-        )
+    cleaned = format_dates_for_export(df)
     write_csv(cleaned, "cleaned_database.csv")
 
     summaries = make_summaries(df)
     for name, table in summaries.items():
         write_csv(table, f"{name}.csv")
 
-    with pd.ExcelWriter(OUT / "mc_note_analysis_outputs.xlsx", engine="openpyxl") as writer:
+    with pd.ExcelWriter(WORKBOOKS / "mc_note_analysis_outputs.xlsx", engine="openpyxl") as writer:
         cleaned.to_excel(writer, sheet_name="cleaned_database", index=False)
         for name, table in summaries.items():
             sheet = name[:31]
@@ -567,7 +654,7 @@ def main() -> None:
 
     make_charts(df, summaries)
     make_report(df, summaries)
-    print(f"Analysis complete: {OUT}")
+    print(f"Analysis complete: {EXPORTS}")
 
 
 if __name__ == "__main__":

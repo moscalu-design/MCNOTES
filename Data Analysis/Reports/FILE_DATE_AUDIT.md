@@ -1,13 +1,13 @@
 # Deep File And Data Audit
 
-Generated: 2026-05-29 19:14
+Generated: 2026-06-01 08:33
 
 ## Scope
 
 - Database rows audited: 5,629
-- PDFs available for direct file audit: 554
-- Database rows matched to an available PDF: 530
-- Matched PDFs with an extracted or prior-audited visible validation date: 526
+- PDFs available for direct file audit: 2,897
+- Database rows matched to an available PDF: 2,637
+- Matched PDFs with an extracted or prior-audited visible validation date: 2,619
 - Prior visible-accuracy samples reused: AFS 123, GNG 25, OTHER 253
 
 The PDF audit covers the files physically present in the AFS, GNG, and OTHER package folders. PIN rows are still included in database-level trend checks, but no PIN PDFs were available in the package folders.
@@ -16,19 +16,21 @@ The PDF audit covers the files physically present in the AFS, GNG, and OTHER pac
 
 The future-date warning is mostly a day/month parsing problem, not evidence that the documents are actually future opinions.
 
-- Database rows with future validation dates: 52
-- Future-dated rows that also had a matching PDF: 49
-- Matched future rows confirmed as visible day/month swaps: 49
+- Database rows with future validation dates: 0
+- Future-dated rows that also had a matching PDF: 0
+- Matched future rows confirmed as visible day/month swaps: 0
 - Example pattern: visible `08/05/2026` means 8 May 2026, but the database stores `2026-08-05`.
 
 Matched date-status breakdown:
 
 | status | matched_rows |
 | --- | --- |
-| db_is_visible_day_month_swap | 72 |
-| db_matches_visible | 449 |
-| db_visible_mismatch | 5 |
-| missing_db_date | 4 |
+| db_matches_filename_not_visible | 3 |
+| db_matches_visible | 304 |
+| db_visible_mismatch | 548 |
+| missing_db_date | 13 |
+| no_visible_date | 5 |
+| visible_matches_filename_db_differs | 1764 |
 
 This matters for the monthly 2026 time series. The year-level OTHER total is less affected than the month-level charts, but the timeline position is materially wrong for many OTHER2026 rows.
 
@@ -39,26 +41,16 @@ OTHER 2026 monthly placement before and after visible-date correction:
 
 | date_basis | month | documents | median_words | median_pages |
 | --- | --- | --- | --- | --- |
-| corrected_visible_dates | 2026-01 | 44 | 1004.5 | 12.0 |
-| corrected_visible_dates | 2026-02 | 52 | 1020.5 | 10.5 |
-| corrected_visible_dates | 2026-03 | 70 | 1293.5 | 14.0 |
-| corrected_visible_dates | 2026-04 | 41 | 866.0 | 13.0 |
-| corrected_visible_dates | 2026-05 | 24 | 1132.0 | 16.5 |
-| corrected_visible_dates | 2026-06 | 1 | 607.0 | 27.0 |
-| corrected_visible_dates | 2026-10 | 1 | 614.0 | 8.0 |
-| corrected_visible_dates | 2026-12 | 1 | 772.0 | 13.0 |
-| database_dates | 2026-01 | 35 | 817.0 | 11.0 |
-| database_dates | 2026-02 | 36 | 970.5 | 11.0 |
-| database_dates | 2026-03 | 55 | 1502.0 | 13.0 |
-| database_dates | 2026-04 | 41 | 885.0 | 13.0 |
-| database_dates | 2026-05 | 15 | 1032.0 | 19.0 |
-| database_dates | 2026-06 | 10 | 1090.5 | 20.0 |
-| database_dates | 2026-07 | 5 | 1076.0 | 12.0 |
-| database_dates | 2026-08 | 7 | 1238.0 | 10.0 |
-| database_dates | 2026-09 | 5 | 1223.0 | 19.0 |
-| database_dates | 2026-10 | 9 | 829.0 | 11.0 |
-| database_dates | 2026-11 | 8 | 830.5 | 13.0 |
-| database_dates | 2026-12 | 8 | 741.5 | 13.0 |
+| corrected_visible_dates | 2026-01 | 43 | 977.0 | 12.0 |
+| corrected_visible_dates | 2026-02 | 53 | 1021.0 | 11.0 |
+| corrected_visible_dates | 2026-03 | 75 | 1271.0 | 14.0 |
+| corrected_visible_dates | 2026-04 | 38 | 847.5 | 12.0 |
+| corrected_visible_dates | 2026-05 | 25 | 1076.0 | 15.0 |
+| database_dates | 2026-01 | 43 | 977.0 | 12.0 |
+| database_dates | 2026-02 | 53 | 1021.0 | 11.0 |
+| database_dates | 2026-03 | 75 | 1271.0 | 14.0 |
+| database_dates | 2026-04 | 38 | 847.5 | 12.0 |
+| database_dates | 2026-05 | 25 | 1076.0 | 15.0 |
 
 ## Page Count Audit
 
@@ -144,26 +136,26 @@ Shortest author/service-office groups with at least 8 documents:
 
 | Template | Batch Folder | File Name | DB Validation Date | visible_header_raw | Visible Validation Date | Visible Validation Date Source | Filename Date | Date Delta Days DB minus Visible | date_status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| OTHER | OTHER2026 | 05.2 NOTEMCDEC 2026-02-03 PJ OPS Simplification of multi-beneficiary intermediated finance products EN.pdf | 2026-03-02 | 03/02/2026 | 2026-02-03 | visible_accuracy | 2026-02-03 | 27.0 | db_is_visible_day_month_swap |
-| OTHER | OTHER2026 | NOTEMCDEC 2026-01-06 GLO Future Allocation of ACP IF Reflows and IRS Envelope EN.pdf | 2026-05-01 | 05/01/2026 | 2026-01-05 | visible_accuracy | 2026-01-06 | 116.0 | db_is_visible_day_month_swap |
-| OTHER | OTHER2026 | NOTEMCDEC 2026-05-11 PMM 2014-0065 - ACCESSBANK AZERBAIJAN LOAN FOR SMES - Exit via Sale to Bank Respubli EN.pdf | 2026-08-05 | 08/05/2026 | 2026-05-08 | visible_accuracy | 2026-05-11 | 89.0 | db_is_visible_day_month_swap |
-| OTHER | OTHER2026 | NOTEMCDEC 2026-01-07 OPS VILNIUS CITY SCHOOLS (2024-0612) - Final Loan Proposal FIPRO.pdf | 2026-07-01 | 07/01/2026 | 2026-01-07 | visible_accuracy | 2026-01-07 | 175.0 | db_is_visible_day_month_swap |
-| OTHER | OTHER2026 | 16 - NOTEMCDEC 2026-05-06 GLO Next Steps in Supporting Ukraine_s Resilience- Recovery and EU Integration EN.pdf | 2026-06-05 | 06/05/2026 | 2026-05-06 | visible_accuracy | 2026-05-06 | 30.0 | db_is_visible_day_month_swap |
-| OTHER | OTHER2026 | NOTEMCDEC 2026-02-06 GLO GLO PJ Just Transition and Just Resilience for Ukraine Programme Implementation EN.pdf | 2026-06-02 | 06/02/2026 | 2026-02-06 | visible_accuracy | 2026-02-06 | 116.0 | db_is_visible_day_month_swap |
-| OTHER | OTHER2026 | 9.3 - NOTEMCDEC 2026-01-05 OPS DOBRUN AND SADOVA SOLAR (2025-0095) - Final Loan Proposal EN - Interrupted Tacit Note.pdf | 2026-05-01 | 05/01/2026 | 2026-01-05 | visible_accuracy | 2026-01-05 | 116.0 | db_is_visible_day_month_swap |
-| OTHER | OTHER2026 | NOTEMCDEC 2026-01-05 OPS DOBRUN AND SADOVA SOLAR (2025-0095) - Final Loan Proposal EN.pdf | 2026-05-01 | 05/01/2026 | 2026-01-05 | visible_accuracy | 2026-01-05 | 116.0 | db_is_visible_day_month_swap |
-| OTHER | OTHER2026 | 05 -  DECLASSIFIED NOTEMCDEC 2026-03-04 HR Internal Mobility and Recruitment EN.pdf | 2026-04-03 | 04/03/2026 | 2026-03-04 | visible_accuracy | 2026-03-04 | 30.0 | db_is_visible_day_month_swap |
-| OTHER | OTHER2026 | NOTEMCDEC 2026-02-11 GLO Ukraine - UNDP Technical Assistance to the Substations Reliability Enhancement P EN.pdf | 2026-10-02 | 10/02/2026 | 2026-02-10 | visible_accuracy | 2026-02-11 | 234.0 | db_is_visible_day_month_swap |
-| OTHER | OTHER2026 | NOTEMCDEC 2026-02-09 OPS IBERDROLA DISTRIBUTION NETWORKS GREEN LOAN (2023-0448) - Change to operation aft EN.pdf | 2026-06-02 | 06/02/2026 | 2026-02-06 | visible_accuracy | 2026-02-09 | 116.0 | db_is_visible_day_month_swap |
-| OTHER | OTHER2026 | NOTEMCDEC 2026-03-12 OPS Inclusions under CaixaBank_s delinked risk sharing operations EN.pdf | 2026-12-03 | 12/03/2026 | 2026-03-12 | visible_accuracy | 2026-03-12 | 266.0 | db_is_visible_day_month_swap |
-| OTHER | OTHER2026 | NOTEMCDEC 2026-03-11 OPS GREEN HYBRID BOND RED ELECTRICA GREEN FINANCE  FRAMEWORK- 2022-0197 EN.pdf | 2026-11-03 | 11/03/2026 | 2026-03-11 | visible_accuracy | 2026-03-11 | 237.0 | db_is_visible_day_month_swap |
-| OTHER | OTHER2026 | 15 - NOTEMCDEC 2026-04-10 OPS OPS OPS Sixth amendment of the InvestEU guarantee agreement - final terms EN.pdf | 2026-10-04 | 10/04/2026 | 2026-04-10 | visible_accuracy | 2026-04-10 | 177.0 | db_is_visible_day_month_swap |
-| OTHER | OTHER2026 | 04 - NOTEMCDEC 2026-05-04 GR_C-RM 2026 EIB Group RAF EN.pdf | 2026-04-05 | 04/05/2026 | 2026-05-04 | visible_accuracy | 2026-05-04 | -29.0 | db_is_visible_day_month_swap |
-| OTHER | OTHER2026 | NOTEMCDEC 2026-04-10 SG GR_C-RM __EIB Group Sustainability Disclosures - financial year 2025  EN.pdf | 2026-10-04 | 10/04/2026 | 2026-04-10 | visible_accuracy | 2026-04-10 | 177.0 | db_is_visible_day_month_swap |
-| OTHER | OTHER2026 | NOTEMCDEC 2026-02-13 OPS Change after Board approval 2023 0564 InvestEU Green Securitisation Lending Enve EN.pdf | 2026-12-02 | 12/02/2026 | 2026-02-12 | visible_accuracy | 2026-02-13 | 293.0 | db_is_visible_day_month_swap |
-| OTHER | OTHER2026 | NOTEMCINFO 2026-03-05 FI H2 2025 Semi-annual report on Indemnities and Fees Waived or Not Charged by EIB EN.pdf | 2026-05-03 | 05/03/2026 | 2026-03-05 | visible_accuracy | 2026-03-05 | 59.0 | db_is_visible_day_month_swap |
-| OTHER | OTHER2026 | 04.1 - NOTEMCDISC 2026-02-09 OPS Battery Booster Loan Facility - revised EC proposal EN.pdf | 2026-09-02 | 09/02/2026 | 2026-02-09 | visible_accuracy | 2026-02-09 | 205.0 | db_is_visible_day_month_swap |
-| OTHER | OTHER2026 | NOTEMCDEC 2026-05-08 GLO Signature of a new Contribution Agreement and amendments under the EC Blending F EN.pdf | 2026-08-05 | 08/05/2026 | 2026-05-08 | visible_accuracy | 2026-05-08 | 89.0 | db_is_visible_day_month_swap |
+| OTHER | OTHER2026 | NOTEMCDEC 2026-05-19 SG Final approval of No High-risk individual operation following InvestEU Investmen EN.pdf | 2026-05-17 | 18/05/2026 | 2026-05-18 | visible_accuracy | 2026-05-19 | -1.0 | db_visible_mismatch |
+| OTHER | OTHER2026 | NOTEMCDEC 2026-05-12 GLO Approval of Two Memoranda of Understanding with Mexican Federal Authorities EN.pdf | 2026-05-10 | 11/05/2026 | 2026-05-11 | visible_accuracy | 2026-05-12 | -1.0 | db_visible_mismatch |
+| OTHER | OTHER2026 | NOTEMCINFO 2026-05-18 OPS RRF Spain mandate - upcoming signature of finance contract EN.pdf | 2026-05-10 | 11/05/2026 | 2026-05-11 | visible_accuracy | 2026-05-18 | -1.0 | db_visible_mismatch |
+| OTHER | OTHER2026 | NOTEMCDEC 2026-05-11 PMM 2014-0065 - ACCESSBANK AZERBAIJAN LOAN FOR SMES - Exit via Sale to Bank Respubli EN.pdf | 2026-05-07 | 08/05/2026 | 2026-05-08 | visible_accuracy | 2026-05-11 | -1.0 | db_visible_mismatch |
+| OTHER | OTHER2026 | NOTEMCDEC 2026-05-05 SG PJ GR_C-RM Update to the Audit Committee - Sustainability reporting and implementation stat EN.pdf | 2026-05-03 | 04/05/2026 | 2026-05-04 | visible_accuracy | 2026-05-05 | -1.0 | db_visible_mismatch |
+| OTHER | OTHER2026 | NOTEMCDEC 2026-05-04 OPS Change after approval - Extension of the Ultimate Signature Deadline (date butoi EN.pdf | 2026-04-29 | 30/04/2026 | 2026-04-30 | visible_accuracy | 2026-05-04 | -1.0 | db_visible_mismatch |
+| OTHER | OTHER2026 | NOTEMCDEC 2026-04-24 OPS EAFRD CO-FINANCING ANDALUCIA 2023-27 (2022-0994) - Change After Approval - Incre EN.pdf | 2026-04-22 | 23/04/2026 | 2026-04-23 | visible_accuracy | 2026-04-24 | -1.0 | db_visible_mismatch |
+| OTHER | OTHER2026 | NOTEMCDEC 2026-04-09 OPS SABADELL RISK SHARING SMES AND MIDCAPS II (2022-0057) - Inclusion of Underlying  EN.pdf | 2026-04-07 | 08/04/2026 | 2026-04-08 | visible_accuracy | 2026-04-09 | -1.0 | db_visible_mismatch |
+| OTHER | OTHER2026 | NOTEMCINFO 2026-04-01 SG OPS PJ DIR SG GLO Closure of MC Action Point 56 - European foundations and pilot MoU  EN.pdf | 2026-03-29 | 30/03/2026 | 2026-03-30 | visible_accuracy | 2026-04-01 | -1.0 | db_visible_mismatch |
+| OTHER | OTHER2026 | NOTEMCDEC 2026-03-31 PJ GLO European Investment Bank participation in new MDB joint coalition _Water Forward EN.pdf | 2026-03-29 | 30/03/2026 | 2026-03-30 | visible_accuracy | 2026-03-31 | -1.0 | db_visible_mismatch |
+| OTHER | OTHER2026 | NOTEMCDEC 2026-03-30 GR_C Group BCBS239 Validation Function (BVF) - 2025 Validation Report and 2026 Valida EN.pdf | 2026-03-26 | 27/03/2026 | 2026-03-27 | visible_accuracy | 2026-03-30 | -1.0 | db_visible_mismatch |
+| OTHER | OTHER2026 | NOTEMCDEC 2026-03-30 PJ OPS GLO Critical Raw Materials - Update to the Board of Directors EN.pdf | 2026-03-26 | 27/03/2026 | 2026-03-27 | visible_accuracy | 2026-03-30 | -1.0 | db_visible_mismatch |
+| OTHER | OTHER2026 | NOTEMCDEC 2026-03-27 GR_C-RM OPS CE Treatment of STS Securitizations for Regulatory Capital Calculations EN.pdf | 2026-03-25 | 26/03/2026 | 2026-03-26 | visible_accuracy | 2026-03-27 | -1.0 | db_visible_mismatch |
+| OTHER | OTHER2026 | NOTEMCDEC 2026-03-26 GLO Amendments to  ongoing agreements regarding blending operations outside EU  and  EN.pdf | 2026-03-24 | 25/03/2026 | 2026-03-25 | visible_accuracy | 2026-03-26 | -1.0 | db_visible_mismatch |
+| OTHER | OTHER2026 | NOTEMCDEC 2026-03-26 SG EIB Group OP results - end February 2026 EN.pdf | 2026-03-24 | 25/03/2026 | 2026-03-25 | visible_accuracy | 2026-03-26 | -1.0 | db_visible_mismatch |
+| OTHER | OTHER2026 | NOTEMCINFO 2026-03-25 PJ OPS GLO Climate Bank Roadmap Phase 2 Implementing Frameworks Planning   EN.pdf | 2026-03-23 | 24/03/2026 | 2026-03-24 | visible_accuracy | 2026-03-25 | -1.0 | db_visible_mismatch |
+| OTHER | OTHER2026 | NOTEMCDEC 2026-03-23 SG Final approval of No High-risk individual operations following InvestEU Investme EN.pdf | 2026-03-19 | 20/03/2026 | 2026-03-20 | visible_accuracy | 2026-03-23 | -1.0 | db_visible_mismatch |
+| OTHER | OTHER2026 | NOTEMCDEC 2026-03-18 PMM 2018-0816 MACHINE VISION (PROPHESEE) Complete Exit Via Restructuring Under Judic EN.pdf | 2026-03-16 | 17/03/2026 | 2026-03-17 | visible_accuracy | 2026-03-18 | -1.0 | db_visible_mismatch |
+| OTHER | OTHER2026 | 17 - NOTEMCDEC 2026-03-18 OPS PMM FTTH non-recourse projects status and lessons learned - approval of selection cr EN.pdf | 2026-03-16 | 17/03/2026 | 2026-03-17 | visible_accuracy | 2026-03-18 | -1.0 | db_visible_mismatch |
+| OTHER | OTHER2026 | NOTEMCDEC 2026-03-17 PJ Procedural Framework between the European Investment Bank- the Council of Europe EN.pdf | 2026-03-15 | 16/03/2026 | 2026-03-16 | visible_accuracy | 2026-03-17 | -1.0 | db_visible_mismatch |
 
 ## Recommended Next Dashboard Changes
 

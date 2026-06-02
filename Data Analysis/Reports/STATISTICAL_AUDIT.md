@@ -1,6 +1,6 @@
 # Statistical Audit
 
-Generated: 2026-05-29 19:20
+Generated: 2026-06-01 08:31
 
 ## 2025 vs 2026YTD Tests
 
@@ -9,13 +9,13 @@ The table below uses bootstrap confidence intervals for the median difference an
 | Template | Metric | n_2025 | n_2026 | median_2025 | median_2026 | median_diff_2026_minus_2025 | bootstrap_ci_low | bootstrap_ci_high | permutation_p_two_sided |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | AFS | Page count before opinion | 518 | 107 | 14.0 | 17.0 | 3.0 | 2.0 | 3.0 | 0.0003332222592469177 |
-| AFS | Text Before Opinions | 518 | 107 | 5808.0 | 6629.0 | 821.0 | 288.46250000000003 | 1455.0 | 0.000999666777740753 |
-| AFS | Words Per Pre Opinion Page | 518 | 107 | 410.97569444444446 | 387.6 | -23.375694444444434 | -35.02700862733754 | -10.474046942640717 | 0.0016661112962345886 |
-| GNG | Text Before Opinions | 423 | 168 | 1489.0 | 1591.5 | 102.5 | 11.987500000000004 | 156.0 | 0.032989003665444855 |
-| GNG | Words Per Page | 423 | 168 | 214.88888888888889 | 230.5 | 15.611111111111114 | 6.889508928571412 | 25.601875000000007 | 0.00433188937020993 |
-| GNG | Words Per Pre Opinion Page | 423 | 168 | 430.4 | 460.3333333333333 | 29.933333333333337 | 10.916666666666629 | 47.625 | 0.001999333555481506 |
-| OTHER | Document Page Count | 689 | 234 | 16.0 | 12.5 | -3.5 | -6.5 | -2.0 | 0.021326224591802733 |
-| OTHER | Words Per Page | 689 | 234 | 75.0 | 96.8989898989899 | 21.898989898989896 | 4.027796474358963 | 37.81956570701136 | 0.011996001332889037 |
+| AFS | Text Before Opinions | 518 | 107 | 5808.0 | 6629.0 | 821.0 | 293.0 | 1428.0 | 0.0006664445184938354 |
+| AFS | Words Per Pre Opinion Page | 518 | 107 | 410.97569444444446 | 387.6 | -23.375694444444434 | -34.31726973684211 | -10.492612522281702 | 0.0016661112962345886 |
+| GNG | Text Before Opinions | 423 | 168 | 1489.0 | 1591.5 | 102.5 | 12.0 | 157.01250000000005 | 0.04298567144285238 |
+| GNG | Words Per Page | 423 | 168 | 214.88888888888889 | 230.5 | 15.611111111111114 | 6.616071428571416 | 25.750089285714285 | 0.0023325558147284237 |
+| GNG | Words Per Pre Opinion Page | 423 | 168 | 430.4 | 460.3333333333333 | 29.933333333333337 | 11.625 | 47.334166666666704 | 0.0026657780739753416 |
+| OTHER | Document Page Count | 689 | 234 | 16.0 | 12.5 | -3.5 | -6.0 | -1.5 | 0.02165944685104965 |
+| OTHER | Words Per Page | 689 | 234 | 75.0 | 96.8989898989899 | 21.898989898989896 | 3.2814607352107417 | 37.78652597402597 | 0.013328890369876709 |
 
 ## Biggest Month-To-Month Drops
 
@@ -41,15 +41,15 @@ These are not causal tests; they are flags for points in time worth checking aga
 | GNG | median_words | 2025-05 | 33 | 1621.0 | -272.0 |
 | GNG | median_words | 2024-11 | 20 | 1390.5 | -238.5 |
 | GNG | median_words | 2024-10 | 41 | 1629.0 | -204.0 |
-| OTHER | median_pages | 2023-01 | 46 | 16.5 | -8.5 |
-| OTHER | median_pages | 2026-10 | 9 | 11.0 | -8.0 |
-| OTHER | median_pages | 2026-07 | 5 | 12.0 | -8.0 |
-| OTHER | median_service_opinions | 2026-09 | 5 | 1.0 | -2.0 |
-| OTHER | median_service_opinions | 2023-01 | 46 | 0.0 | -1.5 |
-| OTHER | median_service_opinions | 2024-01 | 45 | 0.0 | -1.5 |
-| OTHER | median_words | 2025-08 | 25 | 409.0 | -1031.5 |
-| OTHER | median_words | 2025-01 | 42 | 755.5 | -919.5 |
-| OTHER | median_words | 2023-10 | 97 | 875.0 | -793.0 |
+| OTHER | median_pages | 2023-01 | 49 | 17.0 | -8.0 |
+| OTHER | median_pages | 2023-02 | 64 | 11.0 | -6.0 |
+| OTHER | median_pages | 2024-08 | 33 | 12.0 | -6.0 |
+| OTHER | median_service_opinions | 2023-01 | 49 | 0.0 | -1.5 |
+| OTHER | median_service_opinions | 2024-01 | 50 | 0.0 | -1.5 |
+| OTHER | median_service_opinions | 2023-10 | 95 | 0.0 | -1.0 |
+| OTHER | median_words | 2025-01 | 42 | 755.5 | -974.5 |
+| OTHER | median_words | 2025-08 | 22 | 407.5 | -949.5 |
+| OTHER | median_words | 2023-10 | 95 | 875.0 | -793.0 |
 | PIN | median_pages | 2023-07 | 52 | 9.0 | -1.0 |
 | PIN | median_pages | 2023-06 | 35 | 10.0 | -1.0 |
 | PIN | median_pages | 2023-11 | 23 | 9.0 | -1.0 |
