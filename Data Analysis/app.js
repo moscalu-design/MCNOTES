@@ -29,7 +29,12 @@ const DEPARTMENTS = [
   "OTHER",
 ];
 
-const MC_NOTE_TYPES = ["NOTEMCDEC", "NOTEMCINFO", "NOTEMCDISC"];
+const MC_NOTE_TYPES = ["NOTEMCDEC", "NOTEMCDISC", "NOTEMCINFO"];
+const MC_NOTE_TYPE_LABELS = {
+  NOTEMCDEC: "Decision",
+  NOTEMCDISC: "Discussion",
+  NOTEMCINFO: "Info",
+};
 const PAGE_COMPOSITION_PARTS = ["Pre-opinion", "Opinion", "Annex"];
 const PAGE_COMPOSITION_COLORS = {
   "Pre-opinion": "#376996",
@@ -71,7 +76,6 @@ const state = {
   pageTrendMetric: "Document Page Count",
   pageTrendPeriod: "month",
   selectedMcMonthTypes: new Set(MC_NOTE_TYPES),
-  selectedMcOpinionTypes: new Set(MC_NOTE_TYPES),
   authorMinDocs: 10,
   page: 1,
   pageSize: 40,
@@ -155,6 +159,10 @@ function categoryColor(value, index = 0) {
   };
   const palette = ["#376996", "#2a9d8f", "#c1666b", "#b88a2c", "#7759a6", "#2f8db3"];
   return named[value] || palette[index % palette.length];
+}
+
+function mcNoteTypeDisplay(value) {
+  return MC_NOTE_TYPE_LABELS[value] || value || "Missing";
 }
 
 function hasQualityIssue(row) {
@@ -266,7 +274,7 @@ function populateFilters() {
     .map((name) => `<button class="chip active" type="button" data-template="${escapeAttr(name)}">${escapeHtml(name)}</button>`)
     .join("");
   $("mcNoteTypeFilters").innerHTML = MC_NOTE_TYPES.map(
-    (name) => `<button class="chip active" type="button" data-mc-filter-type="${escapeAttr(name)}">${escapeHtml(name)}</button>`
+    (name) => `<button class="chip active" type="button" data-mc-filter-type="${escapeAttr(name)}">${escapeHtml(mcNoteTypeDisplay(name))}</button>`
   ).join("");
   $("extractionFilters").innerHTML = extractions
     .map((name) => `<button class="chip active" type="button" data-extraction="${escapeAttr(name)}">${escapeHtml(name)}</button>`)
@@ -495,18 +503,6 @@ function bindEvents() {
       renderPageTrendChart();
     });
   }
-  document.querySelectorAll("[data-mc-opinion-type]").forEach((input) => {
-    input.addEventListener("change", (event) => {
-      const type = event.target.dataset.mcOpinionType;
-      if (event.target.checked) {
-        state.selectedMcOpinionTypes.add(type);
-      } else {
-        state.selectedMcOpinionTypes.delete(type);
-      }
-      updateMcTypeControls();
-      renderInfoDiscussionOpinionChart();
-    });
-  });
   document.querySelectorAll("[data-mc-month-type]").forEach((input) => {
     input.addEventListener("change", (event) => {
       const type = event.target.dataset.mcMonthType;
@@ -589,7 +585,6 @@ function resetFilters() {
   state.serviceFocus = "";
   state.opinionWordFloor = 0;
   state.selectedMcMonthTypes = new Set(MC_NOTE_TYPES);
-  state.selectedMcOpinionTypes = new Set(MC_NOTE_TYPES);
   $("opinionThresholdInput").value = 0;
   $("opinionThresholdStatus").textContent = opinionFloorText();
   if ($("hideFutureDates")) $("hideFutureDates").checked = false;
@@ -617,7 +612,6 @@ function captureFilterState() {
     serviceFocus: state.serviceFocus,
     opinionWordFloor: state.opinionWordFloor,
     selectedMcMonthTypes: new Set(state.selectedMcMonthTypes),
-    selectedMcOpinionTypes: new Set(state.selectedMcOpinionTypes),
     page: state.page,
   };
 }
@@ -651,10 +645,6 @@ function restoreFilterState(snapshot) {
     Array.from(snapshot.selectedMcMonthTypes || MC_NOTE_TYPES).filter((type) => MC_NOTE_TYPES.includes(type))
   );
   if (!state.selectedMcMonthTypes.size) state.selectedMcMonthTypes = new Set(MC_NOTE_TYPES);
-  state.selectedMcOpinionTypes = new Set(
-    Array.from(snapshot.selectedMcOpinionTypes || MC_NOTE_TYPES).filter((type) => MC_NOTE_TYPES.includes(type))
-  );
-  if (!state.selectedMcOpinionTypes.size) state.selectedMcOpinionTypes = new Set(MC_NOTE_TYPES);
   state.page = snapshot.page || 1;
 
   document.querySelectorAll("[data-template]").forEach((button) => {
@@ -682,10 +672,6 @@ function restoreFilterState(snapshot) {
 function updateMcTypeControls() {
   document.querySelectorAll("[data-mc-month-type]").forEach((input) => {
     input.checked = state.selectedMcMonthTypes.has(input.dataset.mcMonthType);
-    input.closest(".checkbox-pill")?.classList.toggle("active", input.checked);
-  });
-  document.querySelectorAll("[data-mc-opinion-type]").forEach((input) => {
-    input.checked = state.selectedMcOpinionTypes.has(input.dataset.mcOpinionType);
     input.closest(".checkbox-pill")?.classList.toggle("active", input.checked);
   });
 }
@@ -1803,7 +1789,8 @@ function renderPagesView() {
 
 function renderNoteTypesView() {
   renderMcNoteTypeMonthChart();
-  renderInfoDiscussionOpinionChart();
+  renderMcOpinionCoverageQuarterlyChart();
+  renderMcOpinionCoverageYearChart();
   renderMcNoteTypeTable();
 }
 
@@ -1838,51 +1825,19 @@ function mcNoteTypeMonthlyGroups(rows) {
   return { months, types, counts, typeTotals };
 }
 
-function noteTypePercentStackMarkup(months, types, counts, options) {
-  const { top, height, margin, width, barW, label, unitLabel } = options;
-  let html = `<text x="${margin.left}" y="${top - 16}" fill="${COLORS.ink}" font-size="12" font-weight="850">${escapeHtml(label)}</text>`;
-  [0, 0.5, 1].forEach((ratio) => {
-    const y = top + height - ratio * height;
-    html += `<line class="grid-line" x1="${margin.left}" x2="${margin.left + width}" y1="${y}" y2="${y}"></line>
-      <text x="${margin.left - 10}" y="${y + 4}" text-anchor="end" fill="${COLORS.neutral}" font-size="10">${fmtInt.format(ratio * 100)}%</text>`;
-  });
-  const step = width / months.length;
-  months.forEach((month, monthIndex) => {
-    const total = types.reduce((sum, type) => sum + (counts.get(`${month}|${type}`) || 0), 0);
-    if (!total) return;
-    let runningPct = 0;
-    const x = margin.left + monthIndex * step + (step - barW) / 2;
-    types.forEach((type) => {
-      const value = counts.get(`${month}|${type}`) || 0;
-      if (!value) return;
-      const pct = value / total;
-      const y0 = top + height - (runningPct + pct) * height;
-      const y1 = top + height - runningPct * height;
-      html += `<rect x="${x}" y="${y0}" width="${barW}" height="${Math.max(1, y1 - y0)}" rx="2" fill="${categoryColor(
-        type,
-        MC_NOTE_TYPES.indexOf(type)
-      )}" data-tip="${escapeAttr(`${month}<br>${type}<br>${fmtPct.format(pct * 100)}% of selected types<br>${fmtInt.format(value)} of ${fmtInt.format(total)} ${unitLabel}`)}"></rect>`;
-      runningPct += pct;
-    });
-  });
-  return html;
-}
-
 function renderMcNoteTypeMonthChart() {
   const container = $("mcNoteTypeMonthChart");
   const { months, types, counts } = mcNoteTypeMonthlyGroups(state.filtered);
   if (!state.selectedMcMonthTypes.size) return empty(container, "Select at least one MC note type.");
   if (!months.length || !types.length) return empty(container, "No dated MC note type records match the current filters.");
 
-  const svgHeight = 660;
+  const svgHeight = 500;
   const svg = makeSvg(container, 980, svgHeight);
   const margin = { top: 30, right: 34, bottom: 44, left: 70 };
   const width = 980 - margin.left - margin.right;
   const stackHeight = 250;
   const maTop = 338;
   const maHeight = 86;
-  const pctTop = 500;
-  const pctHeight = 72;
   const step = width / months.length;
   const barW = Math.max(5, Math.min(24, step * 0.72));
   const monthTotals = months.map((month) => types.reduce((sum, type) => sum + (counts.get(`${month}|${type}`) || 0), 0));
@@ -1914,7 +1869,7 @@ function renderMcNoteTypeMonthChart() {
       html += `<rect x="${x}" y="${y0}" width="${barW}" height="${Math.max(1, y1 - y0)}" rx="2" fill="${categoryColor(
         type,
         MC_NOTE_TYPES.indexOf(type)
-      )}" data-tip="${escapeAttr(`${month}<br>${type}<br>${fmtInt.format(value)} documents`)}"></rect>`;
+      )}" data-tip="${escapeAttr(`${month}<br>${mcNoteTypeDisplay(type)}<br>${fmtInt.format(value)} documents`)}"></rect>`;
       running += value;
     });
   });
@@ -1935,98 +1890,174 @@ function renderMcNoteTypeMonthChart() {
     html += `<path d="${path}" fill="none" stroke="${categoryColor(series.type, MC_NOTE_TYPES.indexOf(series.type))}" stroke-width="3.2" stroke-linecap="round"></path>`;
   });
   html += monthTicks(months, { ...margin, top: maTop }, width, maHeight);
-  html += noteTypePercentStackMarkup(months, types, counts, {
-    top: pctTop,
-    height: pctHeight,
-    margin,
-    width,
-    barW,
-    label: "100% monthly mix",
-    unitLabel: "documents",
-  });
-  html += monthTicks(months, { ...margin, top: pctTop }, width, pctHeight);
-  html += `<text x="${margin.left + width / 2}" y="${svgHeight - 14}" text-anchor="middle" fill="${COLORS.neutral}" font-size="12">BO validation month</text>`;
+  html += `<text x="${margin.left + width / 2}" y="${svgHeight - 10}" text-anchor="middle" fill="${COLORS.neutral}" font-size="12">BO validation month</text>`;
   html += types
     .map((type, index) => {
-      const x = margin.left + 520 + index * 120;
+      const x = margin.left + 560 + index * 98;
       return `<g><rect x="${x}" y="${maTop - 24}" width="12" height="12" rx="2" fill="${categoryColor(type, MC_NOTE_TYPES.indexOf(type))}"></rect><text x="${x + 18}" y="${
         maTop - 14
-      }" fill="${COLORS.ink}" font-size="11" font-weight="750">${escapeHtml(type)}</text></g>`;
+      }" fill="${COLORS.ink}" font-size="11" font-weight="750">${escapeHtml(mcNoteTypeDisplay(type))}</text></g>`;
     })
     .join("");
   svg.innerHTML = html;
   bindSvgTips(svg);
 }
 
-function mcNoteTypeOpinionGroups(rows) {
-  const types = MC_NOTE_TYPES.filter((type) => state.selectedMcOpinionTypes.has(type));
-  const months = Array.from(
-    new Set(rows.filter((row) => types.includes(mcNoteTypeLabel(row))).map(timelineMonth).filter(Boolean))
-  ).sort();
-  const counts = new Map();
-  rows
-    .filter((row) => timelineMonth(row) && types.includes(mcNoteTypeLabel(row)) && hasServiceOpinion(row))
-    .forEach((row) => {
-      const key = `${timelineMonth(row)}|${mcNoteTypeLabel(row)}`;
-      counts.set(key, (counts.get(key) || 0) + 1);
-    });
-  return { months, types, counts };
+function mcOpinionCoverageQuarterRows(rows) {
+  const validRows = rows.filter((row) => isValidMcNoteType(row) && timelineDate(row));
+  const quarters = Array.from(
+    new Set(
+      validRows.map((row) => {
+        const date = timelineDate(row);
+        const year = Number(date.slice(0, 4));
+        const month = Number(date.slice(5, 7));
+        return `${year} Q${Math.ceil(month / 3)}`;
+      })
+    )
+  ).sort((a, b) => {
+    const [ay, aq] = a.split(" Q").map(Number);
+    const [by, bq] = b.split(" Q").map(Number);
+    return ay - by || aq - bq;
+  });
+  const types = MC_NOTE_TYPES.filter((type) => validRows.some((row) => mcNoteTypeLabel(row) === type));
+  const totals = new Map();
+  const opinionTotals = new Map();
+  validRows.forEach((row) => {
+    const date = timelineDate(row);
+    const year = Number(date.slice(0, 4));
+    const month = Number(date.slice(5, 7));
+    const quarter = `${year} Q${Math.ceil(month / 3)}`;
+    const key = `${quarter}|${mcNoteTypeLabel(row)}`;
+    totals.set(key, (totals.get(key) || 0) + 1);
+    if (hasServiceOpinion(row)) opinionTotals.set(key, (opinionTotals.get(key) || 0) + 1);
+  });
+  return { quarters, types, totals, opinionTotals };
 }
 
-function renderInfoDiscussionOpinionChart() {
-  const container = $("infoDiscussionOpinionChart");
-  const { months, types, counts } = mcNoteTypeOpinionGroups(state.filtered);
-  if (!types.length) return empty(container, "Select at least one MC note type.");
-  if (!months.length) return empty(container, "No dated MC note type records match the current filters.");
+function renderMcOpinionCoverageQuarterlyChart() {
+  const container = $("mcOpinionCoverageQuarterlyChart");
+  const { quarters, types, totals, opinionTotals } = mcOpinionCoverageQuarterRows(state.filtered);
+  if (!quarters.length || !types.length) return empty(container, "No dated MC note type records match the current filters.");
 
-  const svgHeight = 550;
-  const svg = makeSvg(container, 980, svgHeight);
-  const margin = { top: 28, right: 34, bottom: 78, left: 70 };
+  const svg = makeSvg(container, 980, 430);
+  const margin = { top: 34, right: 34, bottom: 78, left: 70 };
   const width = 980 - margin.left - margin.right;
-  const height = 300;
-  const pctTop = 390;
-  const pctHeight = 72;
-  const monthTotals = months.map((month) => types.reduce((sum, type) => sum + (counts.get(`${month}|${type}`) || 0), 0));
-  const max = Math.max(...monthTotals, 1);
-  const step = width / months.length;
-  const barW = Math.max(5, Math.min(24, step * 0.72));
-  const y = (value) => margin.top + height - (value / max) * height;
-
-  let html = gridY(max, margin, width, height, 5).join("");
-  months.forEach((month, monthIndex) => {
-    let running = 0;
-    const x = margin.left + monthIndex * step + (step - barW) / 2;
-    types.forEach((type, typeIndex) => {
-      const value = counts.get(`${month}|${type}`) || 0;
-      if (!value) return;
-      const colorIndex = MC_NOTE_TYPES.indexOf(type);
-      const y0 = y(running + value);
-      const y1 = y(running);
-      html += `<rect x="${x}" y="${y0}" width="${barW}" height="${Math.max(1, y1 - y0)}" rx="2" fill="${categoryColor(
+  const height = 430 - margin.top - margin.bottom;
+  const y = (value) => margin.top + height - (value / 100) * height;
+  const x = (index) => margin.left + (index / Math.max(1, quarters.length - 1)) * width;
+  let html = `<text x="${margin.left}" y="18" fill="${COLORS.neutral}" font-size="11" font-weight="800">Quarterly share of documents with at least one service opinion. ${escapeHtml(opinionFloorText())}</text>`;
+  [0, 25, 50, 75, 100].forEach((value) => {
+    const yy = y(value);
+    html += `<line class="grid-line" x1="${margin.left}" x2="${margin.left + width}" y1="${yy}" y2="${yy}"></line>
+      <text x="${margin.left - 10}" y="${yy + 4}" text-anchor="end" fill="${COLORS.neutral}" font-size="10">${fmtInt.format(value)}%</text>`;
+  });
+  types.forEach((type) => {
+    const points = quarters.map((quarter, index) => {
+      const denominator = totals.get(`${quarter}|${type}`) || 0;
+      const numerator = opinionTotals.get(`${quarter}|${type}`) || 0;
+      return {
+        quarter,
         type,
-        colorIndex
-      )}" data-tip="${escapeAttr(`${month}<br>${type}<br>${fmtInt.format(value)} documents with service opinions<br>${opinionFloorText()}`)}"></rect>`;
-      running += value;
+        denominator,
+        numerator,
+        pct: denominator ? (numerator / denominator) * 100 : null,
+        x: x(index),
+      };
     });
+    const path = points
+      .filter((point) => point.pct !== null)
+      .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${y(point.pct)}`)
+      .join(" ");
+    if (path) {
+      html += `<path d="${path}" fill="none" stroke="${categoryColor(type, MC_NOTE_TYPES.indexOf(type))}" stroke-width="3.4" stroke-linecap="round"></path>`;
+    }
+    points
+      .filter((point) => point.pct !== null)
+      .forEach((point) => {
+        html += `<circle cx="${point.x}" cy="${y(point.pct)}" r="4" fill="${categoryColor(type, MC_NOTE_TYPES.indexOf(type))}" stroke="#ffffff" stroke-width="1.5" data-tip="${escapeAttr(
+          `${point.quarter}<br>${mcNoteTypeDisplay(type)}<br>${fmtPct.format(point.pct)}% with service opinions<br>${fmtInt.format(point.numerator)} of ${fmtInt.format(point.denominator)} documents`
+        )}"></circle>`;
+      });
   });
-  html += monthTicks(months, margin, width, height);
-  html += noteTypePercentStackMarkup(months, types, counts, {
-    top: pctTop,
-    height: pctHeight,
-    margin,
-    width,
-    barW,
-    label: "100% monthly mix",
-    unitLabel: "documents with service opinions",
-  });
-  html += monthTicks(months, { ...margin, top: pctTop }, width, pctHeight);
-  html += `<text x="${margin.left + width / 2}" y="${svgHeight - 30}" text-anchor="middle" fill="${COLORS.neutral}" font-size="12">BO validation month</text>`;
+  const tickStep = Math.max(1, Math.ceil(quarters.length / 12));
+  html += quarters
+    .filter((_, index) => index % tickStep === 0)
+    .map((quarter, index, shown) => {
+      const quarterIndex = quarters.indexOf(quarter);
+      return `<text x="${x(quarterIndex)}" y="${margin.top + height + 25}" text-anchor="middle" fill="${COLORS.neutral}" font-size="11">${escapeHtml(quarter)}</text>`;
+    })
+    .join("");
+  html += `<text x="${margin.left + width / 2}" y="396" text-anchor="middle" fill="${COLORS.neutral}" font-size="12">BO validation quarter</text>`;
   html += types
     .map((type, index) => {
-      const x = margin.left + index * 148;
-      return `<g><rect x="${x}" y="${svgHeight - 18}" width="12" height="12" rx="2" fill="${categoryColor(type, MC_NOTE_TYPES.indexOf(type))}"></rect><text x="${
-        x + 18
-      }" y="${svgHeight - 8}" fill="${COLORS.ink}" font-size="11" font-weight="750">${escapeHtml(type)}</text></g>`;
+      const legendX = margin.left + index * 112;
+      return `<g><rect x="${legendX}" y="414" width="12" height="12" rx="2" fill="${categoryColor(type, MC_NOTE_TYPES.indexOf(type))}"></rect><text x="${
+        legendX + 18
+      }" y="424" fill="${COLORS.ink}" font-size="11" font-weight="750">${escapeHtml(mcNoteTypeDisplay(type))}</text></g>`;
+    })
+    .join("");
+  svg.innerHTML = html;
+  bindSvgTips(svg);
+}
+
+function renderMcOpinionCoverageYearChart() {
+  const container = $("mcOpinionCoverageYearChart");
+  const rows = state.filtered.filter((row) => isValidMcNoteType(row) && timelineDate(row));
+  const years = Array.from(new Set(rows.map((row) => String(timelineDate(row)).slice(0, 4)))).sort();
+  const types = MC_NOTE_TYPES.filter((type) => rows.some((row) => mcNoteTypeLabel(row) === type));
+  if (!years.length || !types.length) return empty(container, "No dated MC note type records match the current filters.");
+
+  const grouped = new Map();
+  rows.forEach((row) => {
+    const year = String(timelineDate(row)).slice(0, 4);
+    const type = mcNoteTypeLabel(row);
+    const key = `${year}|${type}`;
+    if (!grouped.has(key)) grouped.set(key, { year, type, documents: 0, opinionDocs: 0 });
+    const item = grouped.get(key);
+    item.documents += 1;
+    if (hasServiceOpinion(row)) item.opinionDocs += 1;
+  });
+
+  const svg = makeSvg(container, 980, 350);
+  const margin = { top: 34, right: 34, bottom: 72, left: 70 };
+  const width = 980 - margin.left - margin.right;
+  const height = 350 - margin.top - margin.bottom;
+  const yearW = width / years.length;
+  const barW = Math.max(16, Math.min(44, (yearW * 0.9) / Math.max(1, types.length)));
+  const y = (value) => margin.top + height - (value / 100) * height;
+  let html = `<text x="${margin.left}" y="18" fill="${COLORS.neutral}" font-size="11" font-weight="800">Bars show yearly share of documents with at least one service opinion.</text>`;
+  [0, 25, 50, 75, 100].forEach((value) => {
+    const yy = y(value);
+    html += `<line class="grid-line" x1="${margin.left}" x2="${margin.left + width}" y1="${yy}" y2="${yy}"></line>
+      <text x="${margin.left - 10}" y="${yy + 4}" text-anchor="end" fill="${COLORS.neutral}" font-size="10">${fmtInt.format(value)}%</text>`;
+  });
+  years.forEach((year, yearIndex) => {
+    const baseX = margin.left + yearIndex * yearW + (yearW - types.length * barW) / 2;
+    types.forEach((type, typeIndex) => {
+      const item = grouped.get(`${year}|${type}`) || { documents: 0, opinionDocs: 0 };
+      const pct = item.documents ? (item.opinionDocs / item.documents) * 100 : 0;
+      const x = baseX + typeIndex * barW;
+      const yy = y(pct);
+      const columnWidth = barW - 3;
+      const labelY = pct >= 12 ? yy + 13 : yy - 5;
+      const labelFill = pct >= 12 ? "#ffffff" : COLORS.ink;
+      html += `<rect x="${x}" y="${yy}" width="${columnWidth}" height="${Math.max(1, margin.top + height - yy)}" rx="3" fill="${categoryColor(
+        type,
+        MC_NOTE_TYPES.indexOf(type)
+      )}" data-tip="${escapeAttr(`${year}<br>${mcNoteTypeDisplay(type)}<br>${fmtPct.format(pct)}% with service opinions<br>${fmtInt.format(item.opinionDocs)} of ${fmtInt.format(item.documents)} documents`)}"></rect>`;
+      if (item.documents) {
+        html += `<text x="${x + columnWidth / 2}" y="${labelY}" text-anchor="middle" fill="${labelFill}" font-size="9" font-weight="850">${fmtPct.format(pct)}%</text>`;
+      }
+    });
+    html += `<text x="${margin.left + yearIndex * yearW + yearW / 2}" y="${margin.top + height + 24}" text-anchor="middle" fill="${COLORS.neutral}" font-size="11">${escapeHtml(year)}</text>`;
+  });
+  html += `<text x="${margin.left + width / 2}" y="${margin.top + height + 48}" text-anchor="middle" fill="${COLORS.neutral}" font-size="12">BO validation year</text>`;
+  html += types
+    .map((type, index) => {
+      const legendX = margin.left + 590 + index * 92;
+      return `<g><rect x="${legendX}" y="12" width="12" height="12" rx="2" fill="${categoryColor(type, MC_NOTE_TYPES.indexOf(type))}"></rect><text x="${
+        legendX + 18
+      }" y="22" fill="${COLORS.ink}" font-size="11" font-weight="750">${escapeHtml(mcNoteTypeDisplay(type))}</text></g>`;
     })
     .join("");
   svg.innerHTML = html;
@@ -2063,7 +2094,7 @@ function renderMcNoteTypeTable() {
     ["MC Note Type", "Documents", "Opinion Docs", "Opinion Share", "Median Pages", "Pre-Opinion Pages", "Opinion Pages", "Annex Pages", "Median Services", "BO Date Range"],
     rows,
     (row) => [
-      escapeHtml(row.type),
+      escapeHtml(mcNoteTypeDisplay(row.type)),
       numCell(row.documents),
       numCell(row.opinionDocs),
       `${fmtPct.format(row.opinionDocShare)}%`,

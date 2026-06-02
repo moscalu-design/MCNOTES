@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>MC Notes Data Observatory</title>
-    <link rel="stylesheet" href="styles.css?v=20260602-pre2023-toggle-1">
+    <link rel="stylesheet" href="styles.css?v=20260602-mc-type-labels-1">
   </head>
   <body>
     <div class="app-shell">
@@ -307,12 +307,12 @@
                     <span>Decision</span>
                   </label>
                   <label class="checkbox-pill">
-                    <input type="checkbox" data-mc-month-type="NOTEMCINFO" checked>
-                    <span>Info</span>
-                  </label>
-                  <label class="checkbox-pill">
                     <input type="checkbox" data-mc-month-type="NOTEMCDISC" checked>
                     <span>Discussion</span>
+                  </label>
+                  <label class="checkbox-pill">
+                    <input type="checkbox" data-mc-month-type="NOTEMCINFO" checked>
+                    <span>Info</span>
                   </label>
                 </div>
               </div>
@@ -322,25 +322,21 @@
             <article class="panel full">
               <div class="panel-header">
                 <div>
-                  <h3>MC Notes With Opinions</h3>
-                  <p>Monthly documents with at least one service opinion, split by decision, information, and discussion note type.</p>
-                </div>
-                <div class="panel-controls checkbox-pills" aria-label="MC note opinion type selector">
-                  <label class="checkbox-pill">
-                    <input type="checkbox" data-mc-opinion-type="NOTEMCDEC" checked>
-                    <span>Decision</span>
-                  </label>
-                  <label class="checkbox-pill">
-                    <input type="checkbox" data-mc-opinion-type="NOTEMCINFO" checked>
-                    <span>Info</span>
-                  </label>
-                  <label class="checkbox-pill">
-                    <input type="checkbox" data-mc-opinion-type="NOTEMCDISC" checked>
-                    <span>Discussion</span>
-                  </label>
+                  <h3>Quarterly Opinion Coverage</h3>
+                  <p>Quarterly share of documents with at least one service opinion, by MC note type.</p>
                 </div>
               </div>
-              <div id="infoDiscussionOpinionChart" class="chart xlarge"></div>
+              <div id="mcOpinionCoverageQuarterlyChart" class="chart xlarge"></div>
+            </article>
+
+            <article class="panel full">
+              <div class="panel-header">
+                <div>
+                  <h3>Yearly Opinion Coverage</h3>
+                  <p>Annual percentage of documents with at least one service opinion, by MC note type.</p>
+                </div>
+              </div>
+              <div id="mcOpinionCoverageYearChart" class="chart"></div>
             </article>
 
             <article class="panel full">
@@ -595,6 +591,6 @@
         document.documentElement.dataset.puppyRainReady = "true";
       }());
     </script>
-    <script src="app.js?v=20260602-pre2023-toggle-1"></script>
+    <script src="app.js?v=20260602-mc-type-labels-1"></script>
   </body>
 </html>
