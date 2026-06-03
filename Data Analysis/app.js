@@ -46,6 +46,8 @@ const AFS_PROCESS_COLORS = {
   New: "#376996",
 };
 
+const FIGURE_VIEW_ORDER = ["services", "pages", "noteTypes", "authors", "batches", "tests", "quality", "records"];
+
 const state = {
   raw: null,
   records: [],
@@ -75,6 +77,8 @@ const state = {
   timeTrendMetric: "Document Page Count",
   pageTrendMetric: "Document Page Count",
   pageTrendPeriod: "month",
+  pageCompositionPeriod: "month",
+  mcNoteTypePeriod: "month",
   selectedMcMonthTypes: new Set(MC_NOTE_TYPES),
   authorMinDocs: 10,
   page: 1,
@@ -84,7 +88,22 @@ const state = {
 const $ = (id) => document.getElementById(id);
 const fmtInt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 const fmtOne = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
-const fmtPct = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
+const fmtPct = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+
+function niceAxisMax(values, ticks = 5, pad = 1.12) {
+  const rawMax = Math.max(...values.map(Number).filter(Number.isFinite), 1);
+  const padded = rawMax * pad;
+  const roughStep = padded / ticks;
+  const magnitude = 10 ** Math.floor(Math.log10(roughStep || 1));
+  const step = [1, 2, 2.5, 5, 10].map((value) => value * magnitude).find((value) => roughStep <= value) || 10 * magnitude;
+  return Math.ceil(padded / step) * step;
+}
+
+function chartValueLabel(value, suffix = "") {
+  if (suffix === "%") return `${fmtPct.format(value)}%`;
+  if (Math.abs(value) < 10 && Math.abs(value % 1) > 0.01) return `${fmtOne.format(value)}${suffix}`;
+  return `${fmtInt.format(value)}${suffix}`;
+}
 
 function n(value) {
   const out = Number(value);
@@ -132,6 +151,27 @@ function timelineMonth(row) {
   return month === "2000-01" ? "" : month;
 }
 
+function timelineQuarter(row) {
+  const date = timelineDate(row);
+  if (!date) return "";
+  const year = Number(date.slice(0, 4));
+  const month = Number(date.slice(5, 7));
+  if (!year || !month) return "";
+  return `${year} Q${Math.ceil(month / 3)}`;
+}
+
+function timelinePeriod(row, period = "month") {
+  return period === "quarter" ? timelineQuarter(row) : timelineMonth(row);
+}
+
+function periodLabel(period = "month") {
+  return period === "quarter" ? "quarterly" : "monthly";
+}
+
+function periodAxisLabel(period = "month") {
+  return period === "quarter" ? "BO validation quarter" : "BO validation month";
+}
+
 function opinionPassesFloor(words) {
   return n(words) > state.opinionWordFloor;
 }
@@ -163,6 +203,20 @@ function categoryColor(value, index = 0) {
 
 function mcNoteTypeDisplay(value) {
   return MC_NOTE_TYPE_LABELS[value] || value || "Missing";
+}
+
+function assignFigureNumbers() {
+  FIGURE_VIEW_ORDER.forEach((view, viewIndex) => {
+    const panel = document.querySelector(`[data-view-panel="${view}"]`);
+    if (!panel) return;
+    panel.querySelectorAll("article.panel .panel-header h3").forEach((heading, figureIndex) => {
+      heading.querySelector(".figure-number")?.remove();
+      const number = document.createElement("span");
+      number.className = "figure-number";
+      number.textContent = `${viewIndex + 1}.${figureIndex + 1}`;
+      heading.prepend(number);
+    });
+  });
 }
 
 function hasQualityIssue(row) {
@@ -503,6 +557,18 @@ function bindEvents() {
       renderPageTrendChart();
     });
   }
+  if ($("pageCompositionPeriod")) {
+    $("pageCompositionPeriod").addEventListener("change", (event) => {
+      state.pageCompositionPeriod = event.target.value;
+      renderPageCompositionTimeChart();
+    });
+  }
+  if ($("mcNoteTypePeriod")) {
+    $("mcNoteTypePeriod").addEventListener("change", (event) => {
+      state.mcNoteTypePeriod = event.target.value;
+      renderMcNoteTypeMonthChart();
+    });
+  }
   document.querySelectorAll("[data-mc-month-type]").forEach((input) => {
     input.addEventListener("change", (event) => {
       const type = event.target.dataset.mcMonthType;
@@ -526,11 +592,13 @@ function bindEvents() {
       renderServicesView();
     });
   }
-  $("serviceMomentumMetric").addEventListener("change", (event) => {
-    state.serviceMomentumMetric = event.target.value;
-    renderServiceMomentumChart();
-    renderServiceTable();
-  });
+  if ($("serviceMomentumMetric")) {
+    $("serviceMomentumMetric").addEventListener("change", (event) => {
+      state.serviceMomentumMetric = event.target.value;
+      renderServiceMomentumChart();
+      renderServiceTable();
+    });
+  }
   $("authorMinDocs").addEventListener("change", (event) => {
     state.authorMinDocs = Number(event.target.value);
     renderAuthorsView();
@@ -584,12 +652,16 @@ function resetFilters() {
   state.onlyQualityIssues = false;
   state.serviceFocus = "";
   state.opinionWordFloor = 0;
+  state.pageCompositionPeriod = "month";
+  state.mcNoteTypePeriod = "month";
   state.selectedMcMonthTypes = new Set(MC_NOTE_TYPES);
   $("opinionThresholdInput").value = 0;
   $("opinionThresholdStatus").textContent = opinionFloorText();
   if ($("hideFutureDates")) $("hideFutureDates").checked = false;
   $("excludePre2023Validation").checked = false;
   if ($("onlyQualityIssues")) $("onlyQualityIssues").checked = false;
+  if ($("pageCompositionPeriod")) $("pageCompositionPeriod").value = state.pageCompositionPeriod;
+  if ($("mcNoteTypePeriod")) $("mcNoteTypePeriod").value = state.mcNoteTypePeriod;
   updateMcTypeControls();
   state.page = 1;
   update();
@@ -611,6 +683,8 @@ function captureFilterState() {
     onlyQualityIssues: state.onlyQualityIssues,
     serviceFocus: state.serviceFocus,
     opinionWordFloor: state.opinionWordFloor,
+    pageCompositionPeriod: state.pageCompositionPeriod,
+    mcNoteTypePeriod: state.mcNoteTypePeriod,
     selectedMcMonthTypes: new Set(state.selectedMcMonthTypes),
     page: state.page,
   };
@@ -641,6 +715,8 @@ function restoreFilterState(snapshot) {
   state.onlyQualityIssues = snapshot.onlyQualityIssues;
   state.serviceFocus = snapshot.serviceFocus;
   state.opinionWordFloor = snapshot.opinionWordFloor;
+  state.pageCompositionPeriod = snapshot.pageCompositionPeriod === "quarter" ? "quarter" : "month";
+  state.mcNoteTypePeriod = snapshot.mcNoteTypePeriod === "quarter" ? "quarter" : "month";
   state.selectedMcMonthTypes = new Set(
     Array.from(snapshot.selectedMcMonthTypes || MC_NOTE_TYPES).filter((type) => MC_NOTE_TYPES.includes(type))
   );
@@ -667,6 +743,8 @@ function restoreFilterState(snapshot) {
   if ($("onlyQualityIssues")) $("onlyQualityIssues").checked = state.onlyQualityIssues;
   $("opinionThresholdInput").value = state.opinionWordFloor;
   $("opinionThresholdStatus").textContent = opinionFloorText();
+  if ($("pageCompositionPeriod")) $("pageCompositionPeriod").value = state.pageCompositionPeriod;
+  if ($("mcNoteTypePeriod")) $("mcNoteTypePeriod").value = state.mcNoteTypePeriod;
 }
 
 function updateMcTypeControls() {
@@ -938,6 +1016,7 @@ function renderBoxChart() {
             <line x1="${cx - boxW / 3}" x2="${cx + boxW / 3}" y1="${y(d.max)}" y2="${y(d.max)}" stroke="${templateColor(d.template)}" stroke-width="3"></line>
             <rect x="${cx - boxW / 2}" y="${y(d.q3)}" width="${boxW}" height="${Math.max(4, y(d.q1) - y(d.q3))}" rx="5" fill="${templateColor(d.template)}" opacity="0.78"></rect>
             <line x1="${cx - boxW / 2}" x2="${cx + boxW / 2}" y1="${y(d.median)}" y2="${y(d.median)}" stroke="#fff" stroke-width="3"></line>
+            <text x="${cx}" y="${Math.max(14, y(d.median) - 7)}" text-anchor="middle" fill="${COLORS.ink}" font-size="10" font-weight="850">${fmtInt.format(d.median)}</text>
             <text x="${cx}" y="${margin.top + height + 25}" text-anchor="middle" fill="${COLORS.ink}" font-size="12" font-weight="700">${escapeHtml(d.template)}</text>
           </g>`;
         })
@@ -1180,7 +1259,6 @@ function trendMetricConfig(metric) {
 }
 
 function renderServicesView() {
-  renderServiceMomentumChart();
   renderServiceVolumeLengthChart();
   renderServiceTable();
   renderBoTeamExtremesTable();
@@ -1382,7 +1460,23 @@ function renderAuthorsView() {
     color: () => "#9d9d9c",
     tip: (d) => `${d.author}<br>${fmtInt.format(d.docs)} docs<br>${fmtInt.format(d.medianWords)} median Text Before Opinions`,
   });
+  renderAuthorManualRateChart(stats);
   renderAuthorTable(stats);
+}
+
+function renderAuthorManualRateChart(stats) {
+  const rows = [...stats]
+    .filter((row) => row.docs > 0)
+    .sort((a, b) => b.manualRate - a.manualRate || b.docs - a.docs || a.author.localeCompare(b.author))
+    .slice(0, 5);
+  renderHorizontalBars($("authorManualRateChart"), rows, {
+    label: (d) => d.author,
+    value: (d) => d.manualRate,
+    color: () => "#c1666b",
+    suffix: "%",
+    max: 100,
+    tip: (d) => `${d.author}<br>${fmtPct.format(d.manualRate)}% manual<br>${fmtInt.format(d.docs)} docs<br>${escapeHtml(d.templates)}`,
+  });
 }
 
 function renderAuthorCoverage() {
@@ -1647,8 +1741,8 @@ function renderServiceComboChart(container, rows) {
   const height = rows.length * rowH;
   const countMax = Math.max(...rows.map((row) => row.count), 1);
   const lengthMax = Math.max(...rows.flatMap((row) => [row.meanWords, row.medianWords]), 1);
-  const countMaxRounded = Math.ceil(countMax / 500) * 500 || countMax;
-  const lengthMaxRounded = Math.ceil(lengthMax / 250) * 250 || lengthMax;
+  const countMaxRounded = niceAxisMax([countMax], 4, 1.1);
+  const lengthMaxRounded = niceAxisMax([lengthMax], 4, 1.14);
   const barW = (value) => (value / countMaxRounded) * countW;
   const lengthX = (value) => lengthX0 + (value / lengthMaxRounded) * lengthW;
   const countTicks = [0, 0.25, 0.5, 0.75, 1].map((ratio) => countMaxRounded * ratio);
@@ -1692,6 +1786,8 @@ function renderServiceComboChart(container, rows) {
       <line x1="${lengthX(row.medianWords)}" x2="${lengthX(row.meanWords)}" y1="${y + 13}" y2="${y + 13}" stroke="#aeb8c4" stroke-width="2" stroke-linecap="round"></line>
       <circle cx="${lengthX(row.meanWords)}" cy="${y + 13}" r="5" fill="#17212b"></circle>
       <circle cx="${lengthX(row.medianWords)}" cy="${y + 13}" r="5" fill="#ffffff" stroke="#17212b" stroke-width="2"></circle>
+      <text x="${lengthX(row.meanWords) + 8}" y="${y + 10}" fill="${COLORS.ink}" font-size="9" font-weight="850">${fmtInt.format(row.meanWords)}</text>
+      <text x="${lengthX(row.medianWords) + 8}" y="${y + 24}" fill="${COLORS.neutral}" font-size="9" font-weight="850">${fmtInt.format(row.medianWords)}</text>
     </g>`;
   });
   html += `<text x="${margin.left + countW / 2}" y="${margin.top + height + 40}" text-anchor="middle" fill="${COLORS.neutral}" font-size="11">Opinion rows</text>
@@ -1810,19 +1906,20 @@ function hasServiceOpinion(row) {
 function mcNoteTypeMonthlyGroups(rows) {
   const selectedTypes = MC_NOTE_TYPES.filter((type) => state.selectedMcMonthTypes.has(type));
   const validRows = rows.filter((row) => selectedTypes.includes(mcNoteTypeLabel(row)));
-  const months = Array.from(new Set(validRows.map(timelineMonth).filter(Boolean))).sort();
+  const period = state.mcNoteTypePeriod;
+  const periods = Array.from(new Set(validRows.map((row) => timelinePeriod(row, period)).filter(Boolean))).sort();
   const typeTotals = Array.from(groupBy(validRows, mcNoteTypeLabel).entries())
     .map(([type, items]) => ({ type, documents: items.length }))
     .sort((a, b) => MC_NOTE_TYPES.indexOf(a.type) - MC_NOTE_TYPES.indexOf(b.type));
   const types = selectedTypes.filter((type) => typeTotals.some((item) => item.type === type));
   const counts = new Map();
   validRows
-    .filter((row) => timelineMonth(row))
+    .filter((row) => timelinePeriod(row, period))
     .forEach((row) => {
-      const key = `${timelineMonth(row)}|${mcNoteTypeLabel(row)}`;
+      const key = `${timelinePeriod(row, period)}|${mcNoteTypeLabel(row)}`;
       counts.set(key, (counts.get(key) || 0) + 1);
     });
-  return { months, types, counts, typeTotals };
+  return { months: periods, types, counts, typeTotals };
 }
 
 function renderMcNoteTypeMonthChart() {
@@ -1841,7 +1938,7 @@ function renderMcNoteTypeMonthChart() {
   const step = width / months.length;
   const barW = Math.max(5, Math.min(24, step * 0.72));
   const monthTotals = months.map((month) => types.reduce((sum, type) => sum + (counts.get(`${month}|${type}`) || 0), 0));
-  const stackMax = Math.max(...monthTotals, 1);
+  const stackMax = niceAxisMax(monthTotals, 5, 1.16);
   const stackY = (value) => margin.top + stackHeight - (value / stackMax) * stackHeight;
   const maSeries = types.map((type) => {
     const points = months.map((month) => ({ month, value: counts.get(`${month}|${type}`) || 0 }));
@@ -1853,10 +1950,12 @@ function renderMcNoteTypeMonthChart() {
       }),
     };
   });
-  const maMax = Math.max(...maSeries.flatMap((series) => series.points.map((point) => point.value)), 1);
+  const maMax = niceAxisMax(maSeries.flatMap((series) => series.points.map((point) => point.value)), 4, 1.16);
   const maY = (value) => maTop + maHeight - (value / maMax) * maHeight;
+  const period = state.mcNoteTypePeriod;
+  const periodText = periodLabel(period);
 
-  let html = `<text x="${margin.left}" y="18" fill="${COLORS.neutral}" font-size="11" font-weight="800">Stacked columns: monthly documents. Lines below: 3-month moving averages.</text>`;
+  let html = `<text x="${margin.left}" y="18" fill="${COLORS.neutral}" font-size="11" font-weight="800">Stacked columns: ${periodText} documents. Lines below: 3-${period === "quarter" ? "quarter" : "month"} moving averages.</text>`;
   html += gridY(stackMax, margin, width, stackHeight, 5).join("");
   months.forEach((month, monthIndex) => {
     let running = 0;
@@ -1872,9 +1971,13 @@ function renderMcNoteTypeMonthChart() {
       )}" data-tip="${escapeAttr(`${month}<br>${mcNoteTypeDisplay(type)}<br>${fmtInt.format(value)} documents`)}"></rect>`;
       running += value;
     });
+    const total = monthTotals[monthIndex] || 0;
+    if (total) {
+      html += `<text x="${x + barW / 2}" y="${Math.max(margin.top + 10, stackY(total) - 7)}" text-anchor="middle" fill="${COLORS.ink}" font-size="8.5" font-weight="850">${fmtInt.format(total)}</text>`;
+    }
   });
   html += monthTicks(months, margin, width, stackHeight);
-  html += `<text x="${margin.left}" y="${maTop - 14}" fill="${COLORS.ink}" font-size="12" font-weight="850">3-month moving average</text>`;
+  html += `<text x="${margin.left}" y="${maTop - 14}" fill="${COLORS.ink}" font-size="12" font-weight="850">3-${period === "quarter" ? "quarter" : "month"} moving average</text>`;
   html += [0, 0.5, 1]
     .map((ratio) => {
       const value = maMax * ratio;
@@ -1888,9 +1991,15 @@ function renderMcNoteTypeMonthChart() {
       .map((point, index) => `${index === 0 ? "M" : "L"} ${margin.left + (months.indexOf(point.month) / Math.max(1, months.length - 1)) * width} ${maY(point.value)}`)
       .join(" ");
     html += `<path d="${path}" fill="none" stroke="${categoryColor(series.type, MC_NOTE_TYPES.indexOf(series.type))}" stroke-width="3.2" stroke-linecap="round"></path>`;
+    series.points.forEach((point, index) => {
+      const px = margin.left + (index / Math.max(1, series.points.length - 1)) * width;
+      const py = maY(point.value);
+      const labelY = Math.max(maTop + 9, py - 7 - (typeIndex % 2) * 7);
+      html += `<text x="${px}" y="${labelY}" text-anchor="middle" fill="${categoryColor(series.type, MC_NOTE_TYPES.indexOf(series.type))}" font-size="8" font-weight="850" opacity="0.75">${fmtInt.format(point.value)}</text>`;
+    });
   });
   html += monthTicks(months, { ...margin, top: maTop }, width, maHeight);
-  html += `<text x="${margin.left + width / 2}" y="${svgHeight - 10}" text-anchor="middle" fill="${COLORS.neutral}" font-size="12">BO validation month</text>`;
+  html += `<text x="${margin.left + width / 2}" y="${svgHeight - 10}" text-anchor="middle" fill="${COLORS.neutral}" font-size="12">${periodAxisLabel(period)}</text>`;
   html += types
     .map((type, index) => {
       const x = margin.left + 560 + index * 98;
@@ -1940,7 +2049,7 @@ function renderMcOpinionCoverageQuarterlyChart() {
   if (!quarters.length || !types.length) return empty(container, "No dated MC note type records match the current filters.");
 
   const svg = makeSvg(container, 980, 430);
-  const margin = { top: 34, right: 34, bottom: 78, left: 70 };
+  const margin = { top: 34, right: 58, bottom: 78, left: 70 };
   const width = 980 - margin.left - margin.right;
   const height = 430 - margin.top - margin.bottom;
   const y = (value) => margin.top + height - (value / 100) * height;
@@ -1964,20 +2073,30 @@ function renderMcOpinionCoverageQuarterlyChart() {
         x: x(index),
       };
     });
+    const validPoints = points.filter((point) => point.pct !== null);
+    const typeColor = categoryColor(type, MC_NOTE_TYPES.indexOf(type));
+    const meanPct = mean(validPoints.map((point) => point.pct));
+    if (validPoints.length) {
+      html += `<line x1="${margin.left}" x2="${margin.left + width}" y1="${y(meanPct)}" y2="${y(meanPct)}" stroke="${typeColor}" stroke-width="2" stroke-dasharray="6 6" opacity="0.28" data-tip="${escapeAttr(
+        `${mcNoteTypeDisplay(type)} mean<br>${fmtPct.format(meanPct)}% with service opinions`
+      )}"></line>
+        <text x="${margin.left + width + 5}" y="${y(meanPct) + 4}" fill="${typeColor}" opacity="0.72" font-size="9" font-weight="850">${fmtPct.format(meanPct)}</text>`;
+    }
     const path = points
       .filter((point) => point.pct !== null)
       .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${y(point.pct)}`)
       .join(" ");
     if (path) {
-      html += `<path d="${path}" fill="none" stroke="${categoryColor(type, MC_NOTE_TYPES.indexOf(type))}" stroke-width="3.4" stroke-linecap="round"></path>`;
+      html += `<path d="${path}" fill="none" stroke="${typeColor}" stroke-width="3.4" stroke-linecap="round"></path>`;
     }
-    points
-      .filter((point) => point.pct !== null)
-      .forEach((point) => {
-        html += `<circle cx="${point.x}" cy="${y(point.pct)}" r="4" fill="${categoryColor(type, MC_NOTE_TYPES.indexOf(type))}" stroke="#ffffff" stroke-width="1.5" data-tip="${escapeAttr(
+    validPoints.forEach((point, pointIndex) => {
+      const labelOffset = type === "NOTEMCDEC" ? -10 : type === "NOTEMCDISC" ? 14 : -10;
+      const labelY = Math.max(margin.top + 10, Math.min(margin.top + height - 6, y(point.pct) + labelOffset));
+      html += `<circle cx="${point.x}" cy="${y(point.pct)}" r="4" fill="${typeColor}" stroke="#ffffff" stroke-width="1.5" data-tip="${escapeAttr(
           `${point.quarter}<br>${mcNoteTypeDisplay(type)}<br>${fmtPct.format(point.pct)}% with service opinions<br>${fmtInt.format(point.numerator)} of ${fmtInt.format(point.denominator)} documents`
-        )}"></circle>`;
-      });
+        )}"></circle>
+        <text x="${point.x}" y="${labelY}" text-anchor="middle" fill="${typeColor}" font-size="8.5" font-weight="850" opacity="0.92">${fmtPct.format(point.pct)}%</text>`;
+    });
   });
   const tickStep = Math.max(1, Math.ceil(quarters.length / 12));
   html += quarters
@@ -2282,13 +2401,14 @@ function renderStackedTemplateBars(container, data, templates) {
 
 function renderPageCompositionTimeChart() {
   const container = $("pageCompositionTimeChart");
-  const groups = Array.from(groupBy(state.filtered.filter((row) => timelineMonth(row)), timelineMonth).entries())
-    .map(([month, rows]) => {
+  const period = state.pageCompositionPeriod;
+  const groups = Array.from(groupBy(state.filtered.filter((row) => timelinePeriod(row, period)), (row) => timelinePeriod(row, period)).entries())
+    .map(([periodValue, rows]) => {
       const meanPages = mean(rows.map((row) => row["Document Page Count"]));
       const pre = mean(rows.map((row) => row["Page count before opinion"]));
       const annex = mean(rows.map((row) => row["Annex Page Count"]));
       return {
-        month,
+        month: periodValue,
         documents: rows.length,
         values: {
           "Pre-opinion": pre,
@@ -2300,17 +2420,15 @@ function renderPageCompositionTimeChart() {
     .sort((a, b) => a.month.localeCompare(b.month));
   if (!groups.length) return empty(container, "No dated page-composition records match the current filters.");
 
-  const svgHeight = 660;
+  const svgHeight = 500;
   const svg = makeSvg(container, 980, svgHeight);
   const margin = { top: 32, right: 34, bottom: 44, left: 70 };
   const width = 980 - margin.left - margin.right;
   const stackHeight = 250;
   const maTop = 338;
   const maHeight = 86;
-  const pctTop = 500;
-  const pctHeight = 72;
   const totals = groups.map((item) => PAGE_COMPOSITION_PARTS.reduce((sum, part) => sum + n(item.values[part]), 0));
-  const max = Math.ceil(Math.max(...totals, 1) / 5) * 5;
+  const max = niceAxisMax(totals, 5, 1.16);
   const step = width / groups.length;
   const barW = Math.max(5, Math.min(24, step * 0.72));
   const y = (value) => margin.top + stackHeight - (value / max) * stackHeight;
@@ -2321,10 +2439,11 @@ function renderPageCompositionTimeChart() {
       return { month: item.month, value: mean(window.map((entry) => entry.values[part])) };
     }),
   }));
-  const maMax = Math.ceil(Math.max(...maSeries.flatMap((series) => series.points.map((point) => point.value)), 1) / 5) * 5;
+  const maMax = niceAxisMax(maSeries.flatMap((series) => series.points.map((point) => point.value)), 4, 1.16);
   const maY = (value) => maTop + maHeight - (value / maMax) * maHeight;
+  const periodText = periodLabel(period);
 
-  let html = `<text x="${margin.left}" y="18" fill="${COLORS.neutral}" font-size="11" font-weight="800">Stacked columns show mean pages per document.</text>`;
+  let html = `<text x="${margin.left}" y="18" fill="${COLORS.neutral}" font-size="11" font-weight="800">Stacked columns show ${periodText} mean pages per document.</text>`;
   html += gridY(max, margin, width, stackHeight, 5).join("");
   groups.forEach((item, monthIndex) => {
     let running = 0;
@@ -2339,10 +2458,14 @@ function renderPageCompositionTimeChart() {
       )}"></rect>`;
       running += value;
     });
+    const total = totals[monthIndex] || 0;
+    if (total) {
+      html += `<text x="${x + barW / 2}" y="${Math.max(margin.top + 10, y(total) - 7)}" text-anchor="middle" fill="${COLORS.ink}" font-size="8.5" font-weight="850">${fmtOne.format(total)}</text>`;
+    }
   });
   const months = groups.map((item) => item.month);
   html += monthTicks(months, margin, width, stackHeight);
-  html += `<text x="${margin.left}" y="${maTop - 16}" fill="${COLORS.ink}" font-size="12" font-weight="850">3-month moving average</text>`;
+  html += `<text x="${margin.left}" y="${maTop - 16}" fill="${COLORS.ink}" font-size="12" font-weight="850">3-${period === "quarter" ? "quarter" : "month"} moving average</text>`;
   html += [0, 0.5, 1]
     .map((ratio) => {
       const value = maMax * ratio;
@@ -2351,43 +2474,25 @@ function renderPageCompositionTimeChart() {
         <text x="${margin.left - 10}" y="${tickY + 4}" text-anchor="end" fill="${COLORS.neutral}" font-size="10">${fmtInt.format(value)}</text>`;
     })
     .join("");
-  maSeries.forEach((series) => {
+  maSeries.forEach((series, seriesIndex) => {
     const path = series.points
       .map((point, index) => `${index === 0 ? "M" : "L"} ${margin.left + (index / Math.max(1, series.points.length - 1)) * width} ${maY(point.value)}`)
       .join(" ");
     html += `<path d="${path}" fill="none" stroke="${PAGE_COMPOSITION_COLORS[series.part]}" stroke-width="3.2" stroke-linecap="round"></path>`;
-  });
-  html += monthTicks(months, { ...margin, top: maTop }, width, maHeight);
-  html += `<text x="${margin.left}" y="${pctTop - 16}" fill="${COLORS.ink}" font-size="12" font-weight="850">100% monthly mix</text>`;
-  [0, 0.5, 1].forEach((ratio) => {
-    const tickY = pctTop + pctHeight - ratio * pctHeight;
-    html += `<line class="grid-line" x1="${margin.left}" x2="${margin.left + width}" y1="${tickY}" y2="${tickY}"></line>
-      <text x="${margin.left - 10}" y="${tickY + 4}" text-anchor="end" fill="${COLORS.neutral}" font-size="10">${fmtInt.format(ratio * 100)}%</text>`;
-  });
-  groups.forEach((item, monthIndex) => {
-    const total = PAGE_COMPOSITION_PARTS.reduce((sum, part) => sum + n(item.values[part]), 0);
-    if (!total) return;
-    let runningPct = 0;
-    const x = margin.left + monthIndex * step + (step - barW) / 2;
-    PAGE_COMPOSITION_PARTS.forEach((part) => {
-      const value = n(item.values[part]);
-      if (!value) return;
-      const pct = value / total;
-      const y0 = pctTop + pctHeight - (runningPct + pct) * pctHeight;
-      const y1 = pctTop + pctHeight - runningPct * pctHeight;
-      html += `<rect x="${x}" y="${y0}" width="${barW}" height="${Math.max(1, y1 - y0)}" rx="2" fill="${PAGE_COMPOSITION_COLORS[part]}" data-tip="${escapeAttr(
-        `${item.month}<br>${part}: ${fmtPct.format(pct * 100)}% of mean pages<br>${fmtOne.format(value)} of ${fmtOne.format(total)} mean pages`
-      )}"></rect>`;
-      runningPct += pct;
+    series.points.forEach((point, index) => {
+      const px = margin.left + (index / Math.max(1, series.points.length - 1)) * width;
+      const py = maY(point.value);
+      const labelY = Math.max(maTop + 9, py - 7 - (seriesIndex % 2) * 7);
+      html += `<text x="${px}" y="${labelY}" text-anchor="middle" fill="${PAGE_COMPOSITION_COLORS[series.part]}" font-size="8" font-weight="850" opacity="0.75">${fmtOne.format(point.value)}</text>`;
     });
   });
-  html += monthTicks(months, { ...margin, top: pctTop }, width, pctHeight);
-  html += `<text x="${margin.left + width / 2}" y="${svgHeight - 14}" text-anchor="middle" fill="${COLORS.neutral}" font-size="12">BO validation month</text>`;
+  html += monthTicks(months, { ...margin, top: maTop }, width, maHeight);
+  html += `<text x="${margin.left + width / 2}" y="${svgHeight - 10}" text-anchor="middle" fill="${COLORS.neutral}" font-size="12">${periodAxisLabel(period)}</text>`;
   html += PAGE_COMPOSITION_PARTS.map((part, index) => {
     const x = margin.left + index * 150;
-    return `<g><rect x="${x}" y="${svgHeight - 34}" width="12" height="12" rx="2" fill="${PAGE_COMPOSITION_COLORS[part]}"></rect><text x="${
+    return `<g><rect x="${x}" y="${svgHeight - 36}" width="12" height="12" rx="2" fill="${PAGE_COMPOSITION_COLORS[part]}"></rect><text x="${
       x + 18
-    }" y="${svgHeight - 24}" fill="${COLORS.ink}" font-size="11" font-weight="750">${escapeHtml(part)}</text></g>`;
+    }" y="${svgHeight - 26}" fill="${COLORS.ink}" font-size="11" font-weight="750">${escapeHtml(part)}</text></g>`;
   }).join("");
   svg.innerHTML = html;
   bindSvgTips(svg);
@@ -2463,7 +2568,7 @@ function renderAfsProcessPageChart() {
   const margin = { top: 42, right: 88, bottom: 72, left: 70 };
   const width = 980 - margin.left - margin.right;
   const height = 430 - margin.top - margin.bottom;
-  const max = Math.ceil(Math.max(...grouped.map((row) => row.meanPages), 1) / 5) * 5;
+  const max = niceAxisMax(grouped.map((row) => row.meanPages), 5, 1.16);
   const x = (monthIndex) => margin.left + (monthIndex / Math.max(1, months.length - 1)) * width;
   const y = (value) => margin.top + height - (value / max) * height;
 
@@ -2481,7 +2586,8 @@ function renderAfsProcessPageChart() {
     points.forEach((point) => {
       html += `<circle cx="${point.x}" cy="${point.y}" r="4.5" fill="${AFS_PROCESS_COLORS[process]}" stroke="#ffffff" stroke-width="1.5" data-tip="${escapeAttr(
         `${point.month}<br>${process} process<br>${fmtOne.format(point.meanPages)} mean pages<br>${fmtOne.format(point.medianPages)} median pages<br>${fmtInt.format(point.documents)} AFS documents`
-      )}"></circle>`;
+      )}"></circle>
+        <text x="${point.x}" y="${Math.max(margin.top + 10, point.y - 8 - processIndex * 8)}" text-anchor="middle" fill="${AFS_PROCESS_COLORS[process]}" font-size="8.5" font-weight="850">${fmtOne.format(point.meanPages)}</text>`;
     });
     const legendX = margin.left + 520 + processIndex * 110;
     html += `<g><rect x="${legendX}" y="12" width="12" height="12" rx="2" fill="${AFS_PROCESS_COLORS[process]}"></rect><text x="${
@@ -2590,7 +2696,9 @@ function renderCalendarHeatmap() {
             const key = `${year}-${month}`;
             const count = counts.get(key) || 0;
             const intensity = count ? 0.18 + (count / max) * 0.82 : 0.06;
-            return `<rect class="heat-cell" x="${x0 + mi * cellW}" y="${y}" width="${cellW - 6}" height="${cellH}" rx="5" fill="${COLORS.green}" opacity="${intensity}" data-tip="${key}<br>${fmtInt.format(count)} documents"></rect>`;
+            const x = x0 + mi * cellW;
+            return `<rect class="heat-cell" x="${x}" y="${y}" width="${cellW - 6}" height="${cellH}" rx="5" fill="${COLORS.green}" opacity="${intensity}" data-tip="${key}<br>${fmtInt.format(count)} documents"></rect>
+              <text x="${x + (cellW - 6) / 2}" y="${y + 18}" text-anchor="middle" fill="${count / max > 0.48 ? "#ffffff" : COLORS.ink}" font-size="8" font-weight="850">${count ? fmtInt.format(count) : ""}</text>`;
           })
           .join("");
         return row + cells;
@@ -2808,7 +2916,7 @@ function renderHorizontalBars(container, data, options) {
   const svg = makeSvg(container, 900, height);
   const margin = { top: 18, right: 90, bottom: 30, left: 180 };
   const width = 900 - margin.left - margin.right;
-  const max = options.max || Math.max(...data.map(options.value), 1);
+  const max = options.max || niceAxisMax(data.map(options.value), 4, 1.08);
   svg.innerHTML = data
     .map((d, i) => {
       const y = margin.top + i * 30;
@@ -2817,7 +2925,7 @@ function renderHorizontalBars(container, data, options) {
       return `<g class="bar" data-index="${i}" data-tip="${escapeAttr(options.tip ? options.tip(d) : `${options.label(d)}: ${value}`)}">
         <text x="${margin.left - 10}" y="${y + 18}" text-anchor="end" fill="${COLORS.ink}" font-size="12">${escapeHtml(shortLabel(options.label(d), 24))}</text>
         <rect x="${margin.left}" y="${y + 4}" width="${Math.max(2, barW)}" height="17" rx="4" fill="${options.color(d, i)}"></rect>
-        <text x="${margin.left + barW + 8}" y="${y + 18}" fill="${COLORS.neutral}" font-size="12">${fmtOne.format(value)}${options.suffix || ""}</text>
+        <text x="${margin.left + barW + 8}" y="${y + 18}" fill="${COLORS.neutral}" font-size="12" font-weight="750">${chartValueLabel(value, options.suffix || "")}</text>
       </g>`;
     })
     .join("");
@@ -2832,10 +2940,10 @@ function renderHorizontalBars(container, data, options) {
 function renderVerticalBars(container, data, options) {
   if (!data.length) return empty(container);
   const svg = makeSvg(container, 900, 330);
-  const margin = { top: 25, right: 20, bottom: 72, left: 74 };
+  const margin = { top: 34, right: 20, bottom: 72, left: 74 };
   const width = 900 - margin.left - margin.right;
   const height = 330 - margin.top - margin.bottom;
-  const max = Math.max(...data.map(options.value), 1);
+  const max = niceAxisMax(data.map(options.value), 4, 1.18);
   const step = width / data.length;
   svg.innerHTML =
     gridY(max, margin, width, height, 4).join("") +
@@ -2846,8 +2954,10 @@ function renderVerticalBars(container, data, options) {
         const x = margin.left + i * step + step * 0.18;
         const barW = Math.max(10, step * 0.64);
         const y = margin.top + height - barH;
+        const label = options.valueFormat ? options.valueFormat(value) : chartValueLabel(value, options.suffix || "");
         return `<g data-tip="${escapeAttr(options.tip ? options.tip(d) : `${options.label(d)}: ${value}`)}">
           <rect class="bar" x="${x}" y="${y}" width="${barW}" height="${barH}" rx="5" fill="${options.color(d, i)}"></rect>
+          <text x="${x + barW / 2}" y="${Math.max(13, y - 6)}" text-anchor="middle" fill="${COLORS.ink}" font-size="10" font-weight="850">${escapeHtml(label)}</text>
           <text x="${x + barW / 2}" y="${margin.top + height + 20}" text-anchor="middle" fill="${COLORS.ink}" font-size="11">${escapeHtml(shortLabel(options.label(d), 11))}</text>
         </g>`;
       })
@@ -2912,7 +3022,10 @@ function renderHeatMatrix(container, data, templates, departments) {
           const item = data.find((d) => d.template === template && d.dept === dept);
           const words = item ? item.words : 0;
           const opacity = words ? 0.16 + (words / max) * 0.84 : 0.04;
-          return `<rect class="heat-cell" data-template-click="${template}" x="${margin.left + di * cellW + 4}" y="${y}" width="${Math.max(18, cellW - 8)}" height="${cellH}" rx="5" fill="${templateColor(template)}" opacity="${opacity}" data-tip="${template} / ${dept}<br>${fmtInt.format(words)} words<br>${fmtInt.format(item ? item.docs : 0)} documents<br>Click to filter ${template}"></rect>`;
+          const x = margin.left + di * cellW + 4;
+          const cellWidth = Math.max(18, cellW - 8);
+          const label = words ? `<text x="${x + cellWidth / 2}" y="${y + 22}" text-anchor="middle" fill="${words / max > 0.45 ? "#ffffff" : COLORS.ink}" font-size="8" font-weight="850">${fmtInt.format(words)}</text>` : "";
+          return `<rect class="heat-cell" data-template-click="${template}" x="${x}" y="${y}" width="${cellWidth}" height="${cellH}" rx="5" fill="${templateColor(template)}" opacity="${opacity}" data-tip="${template} / ${dept}<br>${fmtInt.format(words)} words<br>${fmtInt.format(item ? item.docs : 0)} documents<br>Click to filter ${template}"></rect>${label}`;
         })
         .join("");
       return label + cells;
@@ -2927,12 +3040,12 @@ function renderHeatMatrix(container, data, templates, departments) {
 function renderLineChart(container, data, options) {
   if (!data.length) return empty(container);
   const svg = makeSvg(container, 980, 420);
-  const margin = { top: 25, right: 34, bottom: 58, left: 74 };
+  const margin = { top: 38, right: 44, bottom: 58, left: 74 };
   const width = 980 - margin.left - margin.right;
   const height = 420 - margin.top - margin.bottom;
   const months = Array.from(new Set(data.map((d) => d.month))).sort();
   const templates = Array.from(new Set(data.map((d) => d.template))).sort();
-  const max = Math.max(...data.map(options.value), 1);
+  const max = niceAxisMax(data.map(options.value), 5, 1.16);
   const x = (month) => margin.left + (months.indexOf(month) / Math.max(1, months.length - 1)) * width;
   const y = (value) => margin.top + height - (value / max) * height;
   const lookup = new Map(data.map((d) => [`${d.month}|${d.template}`, d]));
@@ -2946,7 +3059,13 @@ function renderLineChart(container, data, options) {
     const path = points.map((d, i) => `${i === 0 ? "M" : "L"} ${x(d.month)} ${y(options.value(d))}`).join(" ");
     html += `<path d="${path}" fill="none" stroke="${color}" stroke-width="3"></path>`;
     html += points
-      .map((d) => `<circle class="point" cx="${x(d.month)}" cy="${y(options.value(d))}" r="4" fill="${color}" data-tip="${escapeAttr(options.tip(d))}"></circle>`)
+      .map((d, pointIndex) => {
+        const value = options.value(d);
+        const label = options.valueFormat ? options.valueFormat(value) : chartValueLabel(value);
+        const labelY = Math.max(margin.top + 9, y(value) - 8 - (templateIndex % 2) * 8);
+        return `<circle class="point" cx="${x(d.month)}" cy="${y(value)}" r="4" fill="${color}" data-tip="${escapeAttr(options.tip(d))}"></circle>
+          <text x="${x(d.month)}" y="${labelY}" text-anchor="middle" fill="${color}" font-size="8" font-weight="850" opacity="0.82">${escapeHtml(label)}</text>`;
+      })
       .join("");
     if (options.movingAverage) {
       const ma = movingAverage(points, options.value);
@@ -3209,6 +3328,7 @@ async function refreshDashboardData() {
 
 async function init() {
   await loadDashboardData();
+  assignFigureNumbers();
   bindEvents();
   updateMcTypeControls();
 }

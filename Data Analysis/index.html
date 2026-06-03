@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>MC Notes Data Observatory</title>
-    <link rel="stylesheet" href="styles.css?v=20260602-mc-type-labels-1">
+    <link rel="stylesheet" href="styles.css?v=20260603-author-manual-rate-1">
   </head>
   <body>
     <div class="app-shell">
@@ -154,20 +154,6 @@
             <article class="panel full">
               <div class="panel-header">
                 <div>
-                  <h3>Service Momentum</h3>
-                  <p>Mean or median opinion-length change: recent six months vs prior six, by template.</p>
-                </div>
-                <select id="serviceMomentumMetric" class="compact-select">
-                  <option value="meanWords" selected>Mean words/opinion delta</option>
-                  <option value="medianWords">Median words/opinion delta</option>
-                </select>
-              </div>
-              <div id="serviceMomentumChart" class="momentum-template-grid"></div>
-            </article>
-
-            <article class="panel full">
-              <div class="panel-header">
-                <div>
                   <h3>Service Volume and Length</h3>
                   <p>Opinion volume by service with mean and median opinion length markers.</p>
                 </div>
@@ -247,9 +233,13 @@
             <article class="panel full">
               <div class="panel-header">
                 <div>
-                  <h3>Monthly Page Composition</h3>
-                  <p>Monthly average pre-opinion, opinion, and annex pages by BO validation month.</p>
+                  <h3>Page Composition Trend</h3>
+                  <p>Monthly or quarterly average pre-opinion, opinion, and annex pages by BO validation period.</p>
                 </div>
+                <select id="pageCompositionPeriod" class="compact-select" aria-label="Page composition chart period">
+                  <option value="month" selected>Monthly</option>
+                  <option value="quarter">Quarterly</option>
+                </select>
               </div>
               <div id="pageCompositionTimeChart" class="chart xlarge"></div>
             </article>
@@ -298,10 +288,14 @@
             <article class="panel full">
               <div class="panel-header">
                 <div>
-                  <h3>Monthly Documents By MC Note Type</h3>
-                  <p>BO-validation-month document counts split by MC note type, with three-month moving averages. Missing types are excluded.</p>
+                  <h3>Documents By MC Note Type</h3>
+                  <p>BO-validation-period document counts split by MC note type, with moving averages. Missing types are excluded.</p>
                 </div>
-                <div class="panel-controls checkbox-pills" aria-label="Monthly MC note type selector">
+                <div class="panel-controls checkbox-pills" aria-label="MC note type chart controls">
+                  <select id="mcNoteTypePeriod" class="compact-select" aria-label="MC note type chart period">
+                    <option value="month" selected>Monthly</option>
+                    <option value="quarter">Quarterly</option>
+                  </select>
                   <label class="checkbox-pill">
                     <input type="checkbox" data-mc-month-type="NOTEMCDEC" checked>
                     <span>Decision</span>
@@ -378,6 +372,16 @@
                 </div>
               </div>
               <div id="shortAuthorChart" class="chart"></div>
+            </article>
+
+            <article class="panel full">
+              <div class="panel-header">
+                <div>
+                  <h3>Highest Manual Rate Authors</h3>
+                  <p>Top five author groups by manual extraction rate in the current filter.</p>
+                </div>
+              </div>
+              <div id="authorManualRateChart" class="chart"></div>
             </article>
 
             <article class="panel full">
@@ -591,6 +595,6 @@
         document.documentElement.dataset.puppyRainReady = "true";
       }());
     </script>
-    <script src="app.js?v=20260602-mc-type-labels-1"></script>
+    <script src="app.js?v=20260603-author-manual-rate-1"></script>
   </body>
 </html>

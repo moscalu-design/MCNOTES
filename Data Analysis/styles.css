@@ -839,6 +839,24 @@ input[type="number"] {
   letter-spacing: 0;
 }
 
+.figure-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  min-height: 20px;
+  margin-right: 8px;
+  padding: 2px 7px;
+  border: 1px solid #d6dee8;
+  border-radius: 5px;
+  background: #eef4fa;
+  color: var(--blue);
+  font-size: 0.76rem;
+  font-weight: 900;
+  line-height: 1;
+  vertical-align: 1px;
+}
+
 .panel-header h3::before {
   content: "";
   display: inline-block;
